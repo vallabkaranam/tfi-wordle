@@ -8,19 +8,16 @@ import threading
 from typing import List, Dict, Optional, Any
 from ..models.schemas import Movie
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+
 TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN")
 
 # Provide a fallback path relative to this file
-# Assuming src/services/game_service.py -> ../data/telugu_movies.json
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_FILE = os.path.join(BASE_DIR, "data", "telugu_movies.json")
-CACHE_FILE = "movies_cache.json"
 
 # Singleton In-Memory Cache
 _MOVIES_CACHE: List[Dict[str, Any]] = []
 _CACHE_LOCK = threading.RLock()
-_FETCH_IN_PROGRESS = False
 
 def load_fallback_data() -> List[Dict[str, Any]]:
     """Loads the committed JSON dataset as a deterministic fallback."""
@@ -78,29 +75,21 @@ def _normalize_tmdb_movie(tmdb_item: Dict[str, Any], credits: Dict[str, Any], de
 def _perform_tmdb_fetch():
     """
     Internal function to fetch fresh data from TMDB and update the cache.
-    USES EITHER:
-    1. TMDB_READ_TOKEN (Bearer Token) - Preferred
-    2. TMDB_API_KEY (Query Param) - Fallback
+    Canonical Auth: TMDB_READ_TOKEN (Bearer Token)
     """
     global _MOVIES_CACHE
     
-    if not TMDB_READ_TOKEN and not TMDB_API_KEY:
-        print("No TMDB credentials found. Skipping fetch.")
+    if not TMDB_READ_TOKEN:
+        print("TMDB_READ_TOKEN not found. Skipping fetch.")
         return
 
     movies = []
     base_url = "https://api.themoviedb.org/3"
     
-    # Configure Auth
-    headers = {"Content-Type": "application/json;charset=utf-8"}
-    base_params = {}
-
-    if TMDB_READ_TOKEN:
-        headers["Authorization"] = f"Bearer {TMDB_READ_TOKEN}"
-        # print("Using TMDB Read Token for authentication") 
-    else:
-        base_params["api_key"] = TMDB_API_KEY
-        # print("Using TMDB API Key for authentication")
+    headers = {
+        "Authorization": f"Bearer {TMDB_READ_TOKEN}",
+        "Content-Type": "application/json;charset=utf-8"
+    }
 
     print("Starting background TMDB fetch...")
     # Fetching top ~500 popular Telugu movies (25 pages * 20 results)
@@ -114,7 +103,6 @@ def _perform_tmdb_fetch():
                 "page": page,
                 "vote_count.gte": 10
             }
-            params.update(base_params)
 
             res = requests.get(url, headers=headers, params=params)
             if res.status_code != 200:
@@ -129,7 +117,6 @@ def _perform_tmdb_fetch():
                 details_params = {
                     "append_to_response": "credits"
                 }
-                details_params.update(base_params)
 
                 details_res = requests.get(details_url, headers=headers, params=details_params)
                 if details_res.status_code == 200:
@@ -140,17 +127,17 @@ def _perform_tmdb_fetch():
                     if status != "Released":
                         continue
 
-                    # 2. Filter out unreleased movies by date (Double check)
+                    # 2. Filter out unreleased movies by date
                     release_date_str = item.get("release_date", "")
                     if not release_date_str:
-                        continue # Skip movies without a release date
+                        continue 
                         
                     try:
                         release_date = date.fromisoformat(release_date_str)
                         if release_date > date.today():
                             continue
                     except ValueError:
-                        continue # Skip if date format is invalid
+                        continue
 
                     credits = details.get("credits", {})
                     
@@ -169,13 +156,6 @@ def _perform_tmdb_fetch():
     with _CACHE_LOCK:
         _MOVIES_CACHE = movies
 
-    # Best-effort disk write (cache, distinct from committed fallback)
-    try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(movies, f)
-    except IOError:
-        print("Warning: Could not write to runtime cache file (read-only filesystem?)")
-
     print(f"TMDB fetch complete. Loaded {len(movies)} movies.")
 
 
@@ -183,9 +163,8 @@ def initialize_movie_data(background: bool = True):
     """
     Called on startup.
     Strategy:
-    1. Load strictly from committed fallback (guarantees data availability).
-    2. Try to load recent runtime cache (movies_cache.json) if exists (fresher data).
-    3. If TMDB credentials exist, trigger background fetch to refresh cache.
+    1. Load strictly from committed fallback (guarantees availability).
+    2. If TMDB_READ_TOKEN exists, trigger background fetch to refresh cache with live data.
     """
     global _MOVIES_CACHE
 
@@ -195,27 +174,15 @@ def initialize_movie_data(background: bool = True):
         if fallback_data:
             _MOVIES_CACHE = fallback_data
     
-    # 2. Try loading runtime cache (might be fresher)
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                cached_data = json.load(f)
-                if cached_data:
-                    with _CACHE_LOCK:
-                        _MOVIES_CACHE = cached_data
-                    print(f"Loaded {len(_MOVIES_CACHE)} movies from runtime cache.")
-        except Exception as e:
-            print(f"Failed to load runtime cache: {e}")
-
-    # 3. Trigger background refresh if key exists
-    if TMDB_READ_TOKEN or TMDB_API_KEY:
+    # 2. Trigger background refresh if token exists
+    if TMDB_READ_TOKEN:
         if background:
             print("Triggering background TMDB refresh...")
             threading.Thread(target=_perform_tmdb_fetch, daemon=True).start()
         else:
             _perform_tmdb_fetch()
     else:
-        print("No TMDB credentials. Running in offline/fallback mode.")
+        print("No TMDB_READ_TOKEN. Running in offline/fallback mode (no background fetch).")
 
 
 def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
