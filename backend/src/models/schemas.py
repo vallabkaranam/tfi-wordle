@@ -4,14 +4,14 @@ from typing import List, Optional, Any
 class Movie(BaseModel):
     id: int
     title: str
-    hero: Optional[str] = "Unknown"
-    heroine: Optional[str] = "Unknown" 
-    director: Optional[str] = "Unknown"
-    music: Optional[str] = "Unknown"
-    producer: Optional[str] = "Unknown"
-    poster_path: Optional[str] = None
-    language: Optional[str] = "te" # Telugu default
     year: Optional[int] = None
+    language: str
+    poster_path: Optional[str] = None
+    hero: str
+    heroine: str
+    director: str
+    music: str
+    producer: str
 
 class GuessRequest(BaseModel):
     title: str
