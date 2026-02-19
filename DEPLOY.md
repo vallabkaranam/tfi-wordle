@@ -5,45 +5,51 @@ This application is designed to be deployed as two separate services:
 1.  **Backend**: Python Web Service (FastAPI)
 2.  **Frontend**: Static/Node Web Service (Next.js)
 
-We recommend **Render** for free tier hosting, but Railway or Vercel work similarly.
+We recommend **Render** for free tier hosting.
 
 ---
 
-## 🏗 Backend Deployment (Render)
+## ⚡ Deployment Option 1: Render Blueprint (Recommended)
 
-1.  **Create a New Web Service**
+The repository includes a `render.yaml` file for automated Infrastructure-as-Code deployment.
+
+1.  **Create a New Blueprint Instance** on Render.
     *   Connect your GitHub repository.
-    *   **Root Directory**: `.` (Project Root)
-    *   **Build Command**: `pip install -r backend/requirements.txt`
-    *   **Start Command**: `uvicorn backend.src.main:app --host 0.0.0.0 --port 10000`
+    *   Render will detect `render.yaml` and prompt you to create two services.
+2.  **Configure Environment Variables**:
+    *   `TMDB_API_KEY`: (Optional) Your TMDB API Key. If omitted, mock data is used.
+    *   `CORS_ORIGINS`: Your frontend URL (e.g., `https://tfi-wordle-frontend.onrender.com`).
+    *   `NEXT_PUBLIC_API_URL`: Your backend URL + `/api` (e.g., `https://tfi-wordle-backend.onrender.com/api`).
+3.  **Deploy**: Render will build and deploy both services automatically.
 
-2.  **Environment Variables**
-    *   `PYTHON_VERSION`: `3.9.0` (or greater)
-    *   `TMDB_API_KEY`: Your TMDB API Key (Required for real data)
-        *   *If omitted, the backend will serve mock data.*
-    *   `CORS_ORIGINS`: Comma-separated list of allowed frontend URLs.
-        *   Example: `https://your-frontend-app.onrender.com,http://localhost:3000`
+---
 
-### ❄️ Cold Start & Data Warm-up
+## 🛠️ Deployment Option 2: Manual Setup
+
+If you prefer to configure services manually:
+
+### 1. Backend Service (Python 3.9+)
+*   **Root Directory**: `.` (Project Root)
+*   **Build Command**: `pip install -r backend/requirements.txt`
+*   **Start Command**: `uvicorn backend.src.main:app --host 0.0.0.0 --port $PORT`
+*   **Env Vars**:
+    *   `CORS_ORIGINS`: Comma-separated list (e.g. `https://your-frontend.onrender.com,http://localhost:3000`)
+    *   `TMDB_API_KEY`: (Optional)
+
+### 2. Frontend Service (Node)
+*   **Root Directory**: `frontend`
+*   **Build Command**: `npm install && npm run build`
+*   **Start Command**: `npm start`
+*   **Env Vars**:
+    *   `NEXT_PUBLIC_API_URL`: Full backend API URL (e.g., `https://your-backend.onrender.com/api`)
+
+---
+
+## ❄️ Cold Start & Data Warm-up
 *   The backend spins up instantly.
 *   Upon startup, it triggers a **background task** to fetch 500+ movies from TMDB.
 *   **Behavior**: For the first ~30 seconds after a cold start, the API will serve mock data while fetching real data in the background. This prevents timeout errors during boot.
 *   Once fetched, data is cached in memory for the life of the instance.
-
----
-
-## 🎨 Frontend Deployment (Render)
-
-1.  **Create a New Web Service**
-    *   Connect your GitHub repository.
-    *   **Root Directory**: `frontend`
-    *   **Build Command**: `npm install && npm run build`
-    *   **Start Command**: `npm start`
-
-2.  **Environment Variables**
-    *   `NEXT_PUBLIC_API_URL`: The full URL of your deployed backend API.
-        *   Example: `https://your-backend-app.onrender.com/api`
-        *   *Note: Do not include a trailing slash.*
 
 ---
 
@@ -61,4 +67,4 @@ We recommend **Render** for free tier hosting, but Railway or Vercel work simila
 
 *   **CORS Error**: Ensure your frontend URL (exactly as it appears in the browser) is added to `CORS_ORIGINS` in the backend settings.
 *   **Backend Timeout**: The app is designed *not* to timeout. If it does, ensure `uvicorn` is binding to `0.0.0.0`.
-*   **Missing Data**: Check backend logs. If `TMDB_API_KEY` is invalid, it will permanently serve mock data.
+*   **Missing Data**: Check backend logs. If `TMDB_API_KEY` is invalid or missing, it will permanently serve mock data.
