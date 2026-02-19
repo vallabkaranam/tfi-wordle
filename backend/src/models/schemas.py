@@ -52,6 +52,7 @@ class GuessRequest(BaseModel):
     movie_id: int
     previous_attempts: List[GuessResult]
     seed: Optional[int] = None
+    lang: Optional[str] = 'te'  # Language context: 'te' | 'hi' | 'ta'
 
 class GuessResponse(BaseModel):
     valid: bool

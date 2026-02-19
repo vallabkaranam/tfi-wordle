@@ -24,12 +24,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Metadata file containing manually curated movie data mappings for better accuracy
 METADATA_FILE = os.path.join(BASE_DIR, "data", "tollywood_metadata.json")
 
-# In-memory cache for the "Top 100" or trending Telugu movies
-_MOVIES_CACHE: List[Dict[str, Any]] = []
+# In-memory per-language caches: { 'te': [...], 'hi': [...], 'ta': [...] }
+# Keyed by ISO-639-1 language code as used by TMDB.
+_MOVIES_CACHE: Dict[str, List[Dict[str, Any]]] = {'te': [], 'hi': [], 'ta': []}
 _CACHE_LOCK = threading.RLock()
 
 # Game configuration
 MAX_ATTEMPTS = 5
+
+# Supported language codes and their display names
+SUPPORTED_LANGS = {'te': 'Telugu', 'hi': 'Hindi', 'ta': 'Tamil'}
 
 # -------------------------------------------------------------------
 # METADATA LAYER
@@ -217,81 +221,95 @@ def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
 # DATA FETCH & JOIN LOGIC (Startup Task)
 # -------------------------------------------------------------------
 
-def _perform_data_refresh():
+def _perform_data_refresh(lang: str = 'te'):
     """
-    Main background task to populate _MOVIES_CACHE.
-    Fetches trending Telugu movies from TMDB and joins them with local curated metadata.
+    Background task to populate the cache for a specific language.
+
+    For Telugu ('te'), we join against locally curated metadata for higher accuracy.
+    For Hindi ('hi') and Tamil ('ta'), we fetch the top popular movies from TMDB
+    and enrich each via the live credit-resolution path (same heuristics as non-curated Telugu).
+
+    Args:
+        lang: ISO-639-1 code — 'te', 'hi', or 'ta'.
     """
     global _MOVIES_CACHE
-    metadata_map = _load_local_metadata()
-    if not metadata_map:
-        return
 
     if not TMDB_READ_TOKEN:
         print("[CRITICAL] TMDB_READ_TOKEN missing.")
         return
 
-    movies = []
     base_url = "https://api.themoviedb.org/3"
     headers = {
         "Authorization": f"Bearer {TMDB_READ_TOKEN}",
         "Content-Type": "application/json;charset=utf-8"
     }
 
-    print("Starting background TMDB synchronization (Top 100 with Credits)...")
-    found_ids = set()
-    
-    # Scan through several pages of trending/popular Telugu movies
+    # Telugu uses the curated metadata JSON for role accuracy.
+    # Other languages rely on live TMDB credit resolution.
+    is_curated_lang = (lang == 'te')
+    metadata_map = _load_local_metadata() if is_curated_lang else {}
+
+    if is_curated_lang and not metadata_map:
+        print(f"[WARN] No metadata for Telugu — skipping refresh.")
+        return
+
+    lang_name = SUPPORTED_LANGS.get(lang, lang)
+    print(f"[INFO] Starting TMDB sync for language: {lang_name} ({lang})...")
+
+    movies: List[Dict[str, Any]] = []
+    found_ids: set = set()
+
     for page in range(1, 6):
         try:
             url = f"{base_url}/discover/movie"
             params = {
                 "language": "en-US",
-                "with_original_language": "te",
+                "with_original_language": lang,
                 "sort_by": "popularity.desc",
                 "page": page,
-                "vote_count.gte": 5 # Ensure some level of quality/data availability
+                "vote_count.gte": 50  # Higher threshold for non-curated — ensures playable data
             }
 
             res = requests.get(url, headers=headers, params=params)
             if res.status_code != 200:
                 continue
-                
+
             results = res.json().get("results", [])
             for item in results:
                 tmdb_id = item["id"]
-                # Only cache movies we have curated metadata for (historical Wordle mode)
-                if tmdb_id in metadata_map and tmdb_id not in found_ids:
-                    
-                    # Filtering and validation
-                    rel_date = item.get("release_date", "")
-                    if not rel_date: continue
-                    try:
-                        # Exclude future releases
-                        if date.fromisoformat(rel_date) > date.today(): continue
-                    except ValueError: continue
-                    
-                    # Fetch extra details (credits) for image processing
-                    try:
-                        detail_url = f"{base_url}/movie/{tmdb_id}?append_to_response=credits"
-                        detail_res = requests.get(detail_url, headers=headers)
-                        
-                        if detail_res.status_code == 200:
-                            details = detail_res.json()
-                            credits = details.get("credits", {})
-                        else:
-                            credits = {}
-                            
-                        # Resolve images using metadata name-match
+                if tmdb_id in found_ids:
+                    continue
+
+                rel_date = item.get("release_date", "")
+                if not rel_date:
+                    continue
+                try:
+                    if date.fromisoformat(rel_date) > date.today():
+                        continue
+                except ValueError:
+                    continue
+
+                # For curated Telugu: only include movies in our metadata map
+                if is_curated_lang and tmdb_id not in metadata_map:
+                    continue
+
+                try:
+                    # Fetch full credits for role resolution
+                    detail_res = requests.get(
+                        f"{base_url}/movie/{tmdb_id}?append_to_response=credits",
+                        headers=headers
+                    )
+                    credits = detail_res.json().get("credits", {}) if detail_res.status_code == 200 else {}
+
+                    if is_curated_lang:
+                        # High-accuracy: use our curated role names, images from credits
                         meta = metadata_map[tmdb_id]
                         images = _extract_person_images(credits, meta)
-                        
-                        # Build full object
                         full_movie = {
                             "id": tmdb_id,
                             "title": item["title"],
                             "year": int(rel_date[:4]),
-                            "language": item.get("original_language", "te"),
+                            "language": lang,
                             "poster_path": item.get("poster_path"),
                             "hero": meta["hero"],
                             "heroine": meta["heroine"],
@@ -304,55 +322,74 @@ def _perform_data_refresh():
                             "music_pfp": images["music_pfp"],
                             "producer_pfp": images["producer_pfp"]
                         }
-                        movies.append(full_movie)
-                        found_ids.add(tmdb_id)
-                        
-                    except Exception as e:
-                        print(f"[WARN] Failed to fetch details for {tmdb_id}: {e}")
-                        
+                    else:
+                        # Live heuristic: resolve roles from TMDB credits directly
+                        full_movie = _enrich_from_tmdb_live(tmdb_id)
+                        if not full_movie:
+                            continue
+                        # Ensure language tag is correct
+                        full_movie["language"] = lang
+
+                    movies.append(full_movie)
+                    found_ids.add(tmdb_id)
+
+                except Exception as e:
+                    print(f"[WARN] Detail fetch failed for {tmdb_id}: {e}")
+
         except Exception as e:
-            print(f"[ERROR] Exception during fetch page {page}: {e}")
+            print(f"[ERROR] Page {page} fetch failed for {lang}: {e}")
             break
 
     if not movies:
-        print("[CRITICAL] Cache refresh yielded 0 movies!")
+        print(f"[WARN] Zero movies fetched for lang={lang}.")
         return
 
-    # Thread-safe update of the global cache
+    # Thread-safe update of only this language's slice in the dict
     with _CACHE_LOCK:
-        _MOVIES_CACHE = movies
-    print(f"[SUCCESS] Core data layer updated. Playable curated movies: {len(_MOVIES_CACHE)}")
+        _MOVIES_CACHE[lang] = movies
+    print(f"[SUCCESS] {lang_name} cache updated: {len(movies)} movies.")
+
 
 def initialize_movie_data(background: bool = False):
-    """Entry point for initializing the cache. Can run asynchronously."""
-    print("[INFO] Initializing Movie Data Layer...")
-    if background:
-        threading.Thread(target=_perform_data_refresh, daemon=True).start()
-    else:
-        _perform_data_refresh()
+    """
+    Entry point called at application startup.
+    Refreshes caches for all supported languages.
+    If background=True, each language refresh runs in its own daemon thread.
+    """
+    print("[INFO] Initializing Movie Data Layer (te + hi + ta)...")
+    for lang in SUPPORTED_LANGS:
+        if background:
+            threading.Thread(target=_perform_data_refresh, args=(lang,), daemon=True).start()
+        else:
+            _perform_data_refresh(lang)
 
 # -------------------------------------------------------------------
 # PUBLIC API & GAME LOGIC
 # -------------------------------------------------------------------
 
-def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
-    """Returns the current list of curated cached movies."""
+def fetch_movies_for_lang(lang: str = 'te') -> List[Dict[str, Any]]:
+    """Returns the cached movie list for the given language code."""
     with _CACHE_LOCK:
-        return list(_MOVIES_CACHE)
+        return list(_MOVIES_CACHE.get(lang, []))
         
-def search_movies_tmdb(query: str) -> List[Dict[str, Any]]:
+def search_movies_tmdb(query: str, lang: str = 'te') -> List[Dict[str, Any]]:
     """
-    Proxies a search query directly to TMDB.
-    Fetches up to 3 pages to find as many Telugu matches as possible within the India region.
+    Proxies a search query to TMDB and filters by the specified language.
+    Fetches up to 3 pages to maximise results.
+
+    Args:
+        query: User search string.
+        lang: ISO-639-1 code to filter by original_language — 'te', 'hi', or 'ta'.
     """
-    if not TMDB_READ_TOKEN: return []
-    
+    if not TMDB_READ_TOKEN:
+        return []
+
     url = "https://api.themoviedb.org/3/search/movie"
     headers = {
         "Authorization": f"Bearer {TMDB_READ_TOKEN}",
         "Content-Type": "application/json;charset=utf-8"
     }
-    
+
     all_filtered = []
     for page in range(1, 4):
         params = {
@@ -362,69 +399,76 @@ def search_movies_tmdb(query: str) -> List[Dict[str, Any]]:
             "region": "IN",
             "include_adult": False
         }
-        
         try:
             res = requests.get(url, headers=headers, params=params)
             if res.status_code == 200:
                 results = res.json().get("results", [])
                 for m in results:
-                    # Explicit language filtering to ensure the pool remains TFI-focused
-                    if m.get("original_language") == "te":
+                    # Filter by the requested original language
+                    if m.get("original_language") == lang:
                         all_filtered.append({
                             "id": m["id"],
                             "title": m["title"],
                             "year": int(m["release_date"][:4]) if m.get("release_date") else 0
                         })
-                
-                # Stop if we found a healthy number of matches
                 if len(all_filtered) >= 15:
                     break
             else:
                 break
         except Exception as e:
-            print(f"[ERROR] Search failed on page {page}: {e}")
+            print(f"[ERROR] Search (lang={lang}) failed on page {page}: {e}")
             break
-            
+
     # Deduplicate results by TMDB ID
-    seen = set()
+    seen: set = set()
     unique = []
     for m in all_filtered:
         if m["id"] not in seen:
             unique.append(m)
             seen.add(m["id"])
-            
+
     return unique[:20]
 
-def get_daily_movie(seed: Optional[int] = None) -> Dict[str, Any]:
+def get_daily_movie(seed: Optional[int] = None, lang: str = 'te') -> Dict[str, Any]:
     """
-    Selects a target movie based on a mathematical seed.
-    If no seed is provided, it uses the current local date (Standard Daily Mode).
-    If a custom seed is provided, it uses that (Random/Unlimited Mode).
+    Selects a target movie deterministically for the current language/session.
+
+    Daily mode: seeded by date + language code so each language gets its own unique daily.
+    Unlimited mode: custom integer seed replaces the date.
+
+    Args:
+        seed: Optional random seed for Unlimited Mode.
+        lang: Language pool to pick from.
     """
-    movies = fetch_top_telugu_movies()
+    movies = fetch_movies_for_lang(lang)
     if not movies:
-        return {"id": 0, "title": "Error - No Data"} 
-        
+        return {"id": 0, "title": "Error - No Data"}
+
     if seed is not None:
         random.seed(seed)
     else:
         today = date.today()
-        # Seed versioning allows us to reset/change the sequence without code changes
-        seed_str = f"{today.year}-{today.month}-{today.day}-v1"
+        # Include lang in the seed so Telugu/Hindi/Tamil dailies never collide
+        seed_str = f"{today.year}-{today.month}-{today.day}-{lang}-v1"
         random.seed(seed_str)
-        
-    # Consistency across all users depends on deterministic sorting
+
     sorted_movies = sorted(movies, key=lambda x: x["id"])
     return random.choice(sorted_movies)
 
-def process_guess(guess_id: int, previous_attempts: List[GuessResult], seed: Optional[int] = None) -> GuessResponse:
+def process_guess(guess_id: int, previous_attempts: List[GuessResult], seed: Optional[int] = None, lang: str = 'te') -> GuessResponse:
     """
     Main logic to handle a single guess submission.
     Calculates matches (Hero, Heroine, etc.) and determines game state (Won/Lost/In Progress).
+
+    Args:
+        guess_id: TMDB ID of the movie the user guessed.
+        previous_attempts: All prior GuessResult objects from this session.
+        seed: Optional Unlimited Mode seed.
+        lang: Language context — ensures guess and target come from the same pool.
     """
-    # 1. Determine the target for the session/day
-    target = get_daily_movie(seed)
-    cached_movies = fetch_top_telugu_movies()
+    # 1. Determine the target for the session/day in the correct language pool
+    target = get_daily_movie(seed, lang)
+    cached_movies = fetch_movies_for_lang(lang)
     
     # 2. Resolve the guessed movie
     # Try Cache first for speed

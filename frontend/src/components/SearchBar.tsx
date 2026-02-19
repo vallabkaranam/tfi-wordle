@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Movie } from '../lib/types';
 import { searchMovies } from '../lib/api';
+import { Language } from './LanguageToggle';
 import Fuse from 'fuse.js';
 import { Search, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -16,6 +17,8 @@ interface SearchBarProps {
   onGuess: (id: number, title: string) => void;
   /** Disables input when the game is over */
   disabled?: boolean;
+  /** Current language–scope — ensures search results match selected industry */
+  lang?: Language;
 }
 
 /**
@@ -27,7 +30,7 @@ interface SearchBarProps {
  * - Click-outside to close.
  * - Accessible focus states and loading indicators.
  */
-export default function SearchBar({ movies: initialMovies, onGuess, disabled }: SearchBarProps) {
+export default function SearchBar({ movies: initialMovies, onGuess, disabled, lang = 'te' }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [results, setResults] = useState<Partial<Movie>[]>([]);
@@ -77,7 +80,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled }: 
          setLoading(true);
          try {
              // Fetch global results from the backend proxy
-             const remoteResults = await searchMovies(query);
+             const remoteResults = await searchMovies(query, lang);
              setResults(remoteResults.slice(0, 10)); // Limit dropdown size
              setActiveIndex(-1); // Reset keyboard selection
          } catch (e) {
@@ -88,7 +91,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled }: 
      }, 300);
 
      return () => clearTimeout(timer);
-  }, [query, fuse, initialMovies]);
+  }, [query, fuse, initialMovies, lang]);
 
   const handleSelect = (movie: Partial<Movie>) => {
     if (movie.id && movie.title) {

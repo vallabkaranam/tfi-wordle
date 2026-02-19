@@ -11,24 +11,26 @@ import StatsModal from '../components/StatsModal';
 import ShareButton from '../components/ShareButton';
 import StatsTicker from '../components/StatsTicker';
 import HintPoster from '../components/HintPoster';
+import HowToPlay from '../components/HowToPlay';
+import LanguageToggle, { Language } from '../components/LanguageToggle';
 import confetti from 'canvas-confetti';
-import { Trophy } from 'lucide-react';
+import { Trophy, HelpCircle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Helper: format a Date to "19 Feb 2026"
+// Utility: format a Date to "19 Feb 2026" for display / share text
 // ---------------------------------------------------------------------------
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // ---------------------------------------------------------------------------
-// Feature 1: Countdown Hook — calculates seconds until next midnight (UTC)
+// Feature 1: Live countdown hook — seconds until next local midnight
 // ---------------------------------------------------------------------------
 function useCountdown(): string {
   const getSecondsLeft = () => {
     const now = new Date();
     const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0); // Next local midnight
+    midnight.setHours(24, 0, 0, 0);
     return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000));
   };
 
@@ -46,71 +48,88 @@ function useCountdown(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Main Component
+// Language metadata for visual theming — mirrors LanguageToggle.tsx
+// ---------------------------------------------------------------------------
+const LANG_META: Record<Language, { label: string; industry: string; headerColor: string }> = {
+  te: { label: 'Telugu',  industry: 'Tollywood',  headerColor: 'text-gold' },
+  hi: { label: 'Hindi',   industry: 'Bollywood',  headerColor: 'text-orange-400' },
+  ta: { label: 'Tamil',   industry: 'Kollywood',  headerColor: 'text-red-400' },
+};
+
+// ---------------------------------------------------------------------------
+// Main Game Component
 // ---------------------------------------------------------------------------
 
 /**
- * Home — Main Game Page for TFI Wordle.
+ * Home — Root Page for TFI Wordle.
  *
- * Orchestrates all game logic and renders the full UI:
- *  - Header with live countdown (Feature 1) and stats button (Feature 2)
- *  - Stats Ticker marquee below header (Feature 4)
- *  - SearchBar with global TMDB search
- *  - Progressive blur hint poster after 2 wrong guesses (Feature 5)
- *  - Guess history Grid (reverse chronological order)
- *  - End-game modal with Share button (Feature 3) and stats recording
+ * Manages all game state and wires together:
+ *  - Language toggle (te / hi / ta) [Language Toggle Feature]
+ *  - Countdown timer to next daily puzzle [Feature 1]
+ *  - Stats dashboard via trophy button [Feature 2]
+ *  - Share emoji-grid button in end modal [Feature 3]
+ *  - Stats ticker marquee [Feature 4]
+ *  - Progressive blur hint poster [Feature 5]
+ *  - How-to-Play modal via ? button
+ *  - SearchBar with global TMDB lookup (lang-threaded)
+ *  - Guess Grid (reverse-chronological)
+ *  - End-game modal with answer reveal
  */
 export default function Home() {
-  // Initial curated movie list for fast suggestions in search bar
+  // ── Language state ──────────────────────────────────────────────────────
+  const [language, setLanguage] = useState<Language>('te');
+
+  // ── Curation ─────────────────────────────────────────────────────────────
+  /** Curated movie list for instant SearchBar suggestions */
   const [movies, setMovies] = useState<Partial<Movie>[]>([]);
 
-  // Core game state
+  // ── Core game state ───────────────────────────────────────────────────────
   const [guesses, setGuesses] = useState<GuessResult[]>([]);
   const [gameStatus, setGameStatus] = useState<'in_progress' | 'won' | 'lost'>('in_progress');
   const [target, setTarget] = useState<Movie | null>(null);
-
-  // Custom seed for "Unlimited Mode"; undefined = use daily mode
   const [seed, setSeed] = useState<number | undefined>(undefined);
 
-  // Feature 2: Stats dashboard visibility
+  // ── UI panels ────────────────────────────────────────────────────────────
   const [showStats, setShowStats] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [stats, setStats] = useState<GameStats>(() => loadStats());
 
-  // Feature 3: Share button data
+  // ── Derived values ────────────────────────────────────────────────────────
   const dateLabel = formatDate(new Date());
-
-  // Feature 1: Countdown to next puzzle
   const countdown = useCountdown();
+  const langMeta = LANG_META[language];
 
-  // Feature 5: Number of wrong guesses for hint poster
+  // Wrong guesses drives the blur level in HintPoster
   const wrongGuesses = guesses.filter((g) =>
     !g.matches.hero && !g.matches.heroine && !g.matches.director && !g.matches.music && !g.matches.producer
   ).length;
-
-  // Target poster path for hint poster (only set once game over or from last guess mismatches)
-  // We use a heuristic: show after 2 missed guesses for ANY of the last guess's poster.
   const hintPosterPath = guesses.length >= 2 ? guesses[guesses.length - 1]?.poster_path : undefined;
 
-  // ---------------------------------------------------------------------------
-  // Effects
-  // ---------------------------------------------------------------------------
+  // ── Effects ───────────────────────────────────────────────────────────────
 
-  /** Load curated movies on mount for search bar instant suggestions */
+  /**
+   * Reload curated suggestions whenever the language changes.
+   * Also resets all game state so language pools never bleed into each other.
+   */
   useEffect(() => {
-    fetchMovies().then(setMovies).catch(console.error);
-  }, []);
+    fetchMovies(language).then(setMovies).catch(console.error);
+    // Reset the board for the new language
+    setGuesses([]);
+    setGameStatus('in_progress');
+    setTarget(null);
+    setSeed(undefined);
+  }, [language]);
 
-  // ---------------------------------------------------------------------------
-  // Handlers
-  // ---------------------------------------------------------------------------
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   /**
    * handleGuess — Core turn logic.
-   * Sends movieId + prior attempts to backend, updates game state on response.
+   * Sends movieId + current language + prior attempts to the backend,
+   * then updates state based on the response.
    */
   const handleGuess = useCallback(async (id: number, title: string) => {
     try {
-      const response = await submitGuess(id, guesses, seed);
+      const response = await submitGuess(id, guesses, seed, language);
 
       if (response.valid) {
         setGuesses(response.attempts);
@@ -119,26 +138,29 @@ export default function Home() {
         if (response.status === 'won') {
           triggerWinConfetti();
           if (response.answer) setTarget(response.answer);
-          // Feature 2: Record win and update stats
           const updated = recordGame(true, response.attempts.length);
           setStats(updated);
         } else if (response.status === 'lost') {
           if (response.answer) setTarget(response.answer);
-          // Feature 2: Record loss
           const updated = recordGame(false, response.attempts.length);
           setStats(updated);
         }
       }
     } catch (e) {
       console.error('Guess submission error:', e);
-      alert('Failed to submit guess. Please check your connection and try again.');
+      alert('Failed to submit guess. Check your connection and try again.');
     }
-  }, [guesses, seed]);
+  }, [guesses, seed, language]);
 
   /**
-   * startNewGame — Generates a new random seed and resets all game state.
-   * This enters "Unlimited Mode" — a new random movie each round.
+   * handleLanguageChange — Switches language and resets the full game state.
+   * A clean reset prevents any cross-language data contamination.
    */
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang); // triggers useEffect above
+  };
+
+  /** startNewGame — Random seed generates an Unlimited Mode round. */
   const startNewGame = () => {
     const newSeed = Math.floor(Math.random() * 1_000_000);
     setSeed(newSeed);
@@ -147,13 +169,7 @@ export default function Home() {
     setTarget(null);
   };
 
-  // ---------------------------------------------------------------------------
-  // Win Animation
-  // ---------------------------------------------------------------------------
-
-  /**
-   * triggerWinConfetti — Launches a timed, dual-origin gold confetti burst.
-   */
+  /** triggerWinConfetti — Dual-origin gold star burst animation. */
   const triggerWinConfetti = () => {
     const duration = 3_000;
     const end = Date.now() + duration;
@@ -169,82 +185,97 @@ export default function Home() {
     }, 250);
   };
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-cinema text-white font-sans">
 
-      {/* ==================================================================
-          HEADER — Branding, countdown (F1), stats button (F2), mode badge
-      ================================================================== */}
-      <header className="w-full max-w-6xl flex items-center justify-between py-5 px-4 border-b border-white/10 sticky top-0 bg-cinema/95 backdrop-blur-md z-40">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tighter text-gold">
-            TFI <span className="text-white">WORDLE</span>
+      {/* ================================================================
+          HEADER — Branding, Language Toggle, Countdown (F1), Icons
+      ================================================================ */}
+      <header className="w-full max-w-6xl flex items-center justify-between py-4 px-4 border-b border-white/10 sticky top-0 bg-cinema/95 backdrop-blur-md z-40">
+
+        {/* Left: Brand + optional mode badge */}
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tighter shrink-0">
+            <span className={langMeta.headerColor}>TFI</span>
+            <span className="text-white"> WORDLE</span>
           </h1>
           {seed !== undefined && (
-            <span className="text-[10px] bg-gold/20 text-gold px-2 py-0.5 rounded font-bold uppercase tracking-widest border border-gold/20">
+            <span className="hidden sm:inline text-[10px] bg-white/10 text-white/70 px-2 py-0.5 rounded font-bold uppercase tracking-widest border border-white/10">
               ∞ Unlimited
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Feature 1: Live countdown to next daily puzzle */}
+        {/* Center: Language Toggle */}
+        <div className="flex-1 flex justify-center px-2">
+          <LanguageToggle value={language} onChange={handleLanguageChange} />
+        </div>
+
+        {/* Right: Countdown + icon buttons */}
+        <div className="flex items-center gap-2 shrink-0">
           {seed === undefined && (
-            <div className="hidden sm:flex flex-col items-end">
+            <div className="hidden lg:flex flex-col items-end">
               <span className="text-[9px] text-gray-600 uppercase tracking-widest">Next puzzle</span>
               <span className="text-xs font-mono text-gray-400 tabular-nums">{countdown}</span>
             </div>
           )}
-
-          {/* Feature 2: Stats trigger button */}
+          {/* How-to-Play button */}
+          <button
+            onClick={() => setShowHelp(true)}
+            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            title="How to Play"
+            aria-label="How to Play"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
+          {/* Stats button */}
           <button
             onClick={() => setShowStats(true)}
             className="p-2 rounded-lg text-gray-400 hover:text-gold hover:bg-white/5 transition-colors"
-            title="View Statistics"
-            aria-label="View your statistics"
+            title="Statistics"
+            aria-label="View Statistics"
           >
             <Trophy className="h-5 w-5" />
           </button>
         </div>
       </header>
 
-      {/* ==================================================================
-          FEATURE 4: Scrolling stats ticker / marquee
-      ================================================================== */}
+      {/* ================================================================
+          FEATURE 4: Stats Ticker Marquee
+      ================================================================ */}
       <StatsTicker />
 
-      {/* ==================================================================
+      {/* ================================================================
           GAME AREA
-      ================================================================== */}
+      ================================================================ */}
       <div className="w-full max-w-6xl flex-1 px-4 pt-6 pb-20">
 
-        {/* Remaining attempts counter */}
+        {/* Industry context + guess counter */}
         <div className="w-full max-w-lg mx-auto mb-4 text-center">
+          <p className="text-[11px] text-gray-500 mb-1 uppercase tracking-widest font-bold">
+            {langMeta.industry} · {langMeta.label} Cinema
+          </p>
           {gameStatus === 'in_progress' ? (
             <p className="text-sm text-gray-400">
-              You have{' '}
-              <span className="text-gold font-bold">{5 - guesses.length}</span>{' '}
-              guess{5 - guesses.length !== 1 ? 'es' : ''} remaining
+              <span className={`font-bold ${langMeta.headerColor}`}>{5 - guesses.length}</span>
+              {' '}guess{5 - guesses.length !== 1 ? 'es' : ''} remaining
             </p>
           ) : (
-            <p className="text-sm text-gold font-bold uppercase tracking-widest">Game Over</p>
+            <p className="text-sm font-bold uppercase tracking-widest text-gold">Game Over</p>
           )}
         </div>
 
-        {/* Search input — globally enabled TMDB lookup */}
+        {/* Search — language-aware TMDB lookup */}
         <SearchBar
           movies={movies}
           onGuess={handleGuess}
           disabled={gameStatus !== 'in_progress'}
+          lang={language}
         />
 
-        {/* ==============================================================
-            FEATURE 5: Progressive blur hint poster (after 2 wrong guesses)
-        ============================================================== */}
+        {/* Feature 5: Blur hint poster after 2+ wrong guesses */}
         {gameStatus === 'in_progress' && (
           <HintPoster
             posterPath={hintPosterPath}
@@ -252,46 +283,45 @@ export default function Home() {
           />
         )}
 
-        {/* Guess history — newest guess at the top */}
+        {/* Guess history — newest at top */}
         <div className="mt-6">
           <Grid guesses={guesses} />
         </div>
       </div>
 
-      {/* ==================================================================
-          FEATURE 2: Stats Modal
-      ================================================================== */}
+      {/* ================================================================
+          Modals: How-to-Play, Stats
+      ================================================================ */}
+      <HowToPlay isOpen={showHelp} onClose={() => setShowHelp(false)} />
       <StatsModal isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} />
 
-      {/* ==================================================================
-          END-GAME OVERLAY — Win / Loss + Share (F3)
-      ================================================================== */}
+      {/* ================================================================
+          END-GAME OVERLAY — Win / Loss + Feature 3 Share
+      ================================================================ */}
       {gameStatus !== 'in_progress' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-cinema-light border border-gold/30 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="bg-cinema-light border border-gold/30 p-7 rounded-2xl max-w-md w-full text-center shadow-2xl overflow-y-auto max-h-[90vh]">
 
-            {/* Result emoji and headline */}
             {gameStatus === 'won' ? (
               <>
-                <div className="text-6xl mb-4 animate-bounce">🍿</div>
+                <div className="text-6xl mb-3 animate-bounce">🍿</div>
                 <h2 className="text-3xl font-bold text-gold mb-1">BLOCKBUSTER!</h2>
-                <p className="text-gray-300 mb-2">
-                  Won in <span className="text-white font-bold">{guesses.length}</span> guess{guesses.length > 1 ? 'es' : ''}
+                <p className="text-gray-300 mb-1">
+                  Won in <span className="text-white font-bold">{guesses.length}</span> guess{guesses.length !== 1 ? 'es' : ''}
                 </p>
-                {/* Streak callout */}
                 {stats.currentStreak > 1 && (
-                  <p className="text-xs text-gold/80 mb-4">🔥 {stats.currentStreak} day streak!</p>
+                  <p className="text-xs text-gold/80 mb-4">🔥 {stats.currentStreak}-day streak!</p>
                 )}
               </>
             ) : (
               <>
-                <div className="text-6xl mb-4 grayscale opacity-60">🎬</div>
+                <div className="text-6xl mb-3 grayscale opacity-60">🎬</div>
                 <h2 className="text-3xl font-bold text-white mb-2">FLOP</h2>
                 <p className="text-gray-300 mb-4">You ran out of guesses.</p>
               </>
             )}
 
-            {/* Answer reveal card */}
+            {/* Answer reveal */}
             {target && (
               <div className="bg-black/40 p-4 rounded-xl mb-5 text-left border border-white/5">
                 <div className="flex gap-4 mb-3">
@@ -302,15 +332,11 @@ export default function Home() {
                       alt={target.title}
                     />
                   ) : (
-                    <div className="w-16 h-24 bg-gray-800 rounded flex items-center justify-center text-xs text-gray-500 shrink-0">
-                      No Poster
-                    </div>
+                    <div className="w-16 h-24 bg-gray-800 rounded flex items-center justify-center text-xs text-gray-500 shrink-0">No Poster</div>
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0">
                     <h3 className="text-lg font-bold text-gold truncate">{target.title}</h3>
-                    <p className="text-gray-400 text-xs mb-2">
-                      {target.year} · {target.language?.toUpperCase()}
-                    </p>
+                    <p className="text-gray-400 text-xs mb-1">{target.year} · {target.language?.toUpperCase()}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs border-t border-white/10 pt-3">
@@ -324,22 +350,17 @@ export default function Home() {
             )}
 
             {/* Action buttons */}
-            <div className="flex gap-3 flex-col sm:flex-row">
+            <div className="flex gap-2 flex-col sm:flex-row">
               <button
                 onClick={startNewGame}
-                className="flex-1 px-5 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 transition-colors shadow-lg shadow-gold/20 text-sm"
+                className="flex-1 px-4 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 transition-colors text-sm shadow-lg shadow-gold/20"
               >
-                Play New Game
+                New Game
               </button>
-              {/* Feature 3: Share button */}
-              <ShareButton
-                guesses={guesses}
-                gameStatus={gameStatus}
-                dateLabel={dateLabel}
-              />
+              <ShareButton guesses={guesses} gameStatus={gameStatus} dateLabel={dateLabel} />
               <button
                 onClick={() => window.location.reload()}
-                className="px-5 py-3 bg-white/5 text-white font-medium rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm"
+                className="px-4 py-3 bg-white/5 text-white font-medium rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm"
               >
                 Daily
               </button>
