@@ -267,7 +267,9 @@ def _perform_data_refresh(lang: str = 'te'):
                 "with_original_language": lang,
                 "sort_by": "popularity.desc",
                 "page": page,
-                "vote_count.gte": 50  # Higher threshold for non-curated — ensures playable data
+                # Telugu curated mode: low threshold — metadata filter controls quality
+                # Non-curated (hi/ta): higher bar ensures we get movies with playable credit data
+                "vote_count.gte": 5 if is_curated_lang else 50
             }
 
             res = requests.get(url, headers=headers, params=params)

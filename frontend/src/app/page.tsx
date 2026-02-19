@@ -246,7 +246,7 @@ export default function Home() {
       </div>
 
       {/* ── Modals ── */}
-      <HowToPlay isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <HowToPlay isOpen={showHelp} onClose={() => setShowHelp(false)} language={language} />
       <StatsModal isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} />
 
       {/* ── End-game overlay ── */}

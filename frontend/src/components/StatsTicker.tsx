@@ -14,7 +14,7 @@ const TICKS = [
   '🎬 Every movie is a new mystery — can you crack it?',
   '🍿 Hero, Heroine, Director, Music, Producer — get all 5 green to win!',
   '🏆 Your streak resets on a loss — play every day',
-  '🔍 Can\'t find a movie? Search any Telugu title from TMDB',
+  '🔍 Search any movie — we pull from the full TMDB catalogue',
   '⭐ The daily puzzle resets at midnight',
   '📣 Share your emoji grid and challenge your friends!',
   '🎵 S.S. Thaman, Devi Sri Prasad, M.M. Keeravani — can you name them all?',

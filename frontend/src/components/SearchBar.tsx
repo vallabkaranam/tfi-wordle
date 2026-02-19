@@ -5,6 +5,13 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Movie } from '../lib/types';
 import { searchMovies } from '../lib/api';
 import { Language } from './LanguageToggle';
+
+/** Maps language codes to human-readable industry names for UI display */
+const INDUSTRY_LABEL: Record<Language, string> = {
+  te: 'Telugu Cinema',
+  hi: 'Hindi Cinema',
+  ta: 'Tamil Cinema',
+};
 import Fuse from 'fuse.js';
 import { Search, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -140,7 +147,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
             "w-full bg-cinema-light/95 backdrop-blur-md border border-white/10 text-white pl-10 pr-4 py-3 rounded-xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-gold/50 transition-all placeholder:text-gray-500",
             disabled && "opacity-50 cursor-not-allowed"
           )}
-          placeholder="Search for any Telugu movie..."
+          placeholder={`Search for any ${INDUSTRY_LABEL[lang ?? 'te'].split(' ')[0]} movie...`}
           value={query}
           onKeyDown={handleKeyDown}
           onChange={(e) => {
@@ -182,7 +189,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
                         {movie.title}
                       </span>
                       {movie.year && (
-                        <span className="text-[10px] text-gray-500 mt-0.5 font-bold uppercase tracking-tighter">Telugu Cinema</span>
+                        <span className="text-[10px] text-gray-500 mt-0.5 font-bold uppercase tracking-tighter">{INDUSTRY_LABEL[lang ?? 'te']}</span>
                       )}
                     </div>
                     <span className={cn(

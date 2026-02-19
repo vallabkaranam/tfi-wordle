@@ -2,23 +2,85 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, HelpCircle } from 'lucide-react';
+import { Language } from './LanguageToggle';
 
 interface HowToPlayProps {
   isOpen: boolean;
   onClose: () => void;
+  language?: Language;
 }
 
+/** Per-language copy for the instructions modal */
+const LANG_INFO: Record<Language, {
+  industry: string;
+  exampleMovie: string;
+  exampleHero: string;
+  exampleHeroine: string;
+  exampleDirector: string;
+  exampleMusic: string;
+  exampleProducer: string;
+  heroMatch: boolean;
+  heroineMatch: boolean;
+  directorMatch: boolean;
+  musicMatch: boolean;
+  producerMatch: boolean;
+  summary: string;
+}> = {
+  te: {
+    industry: 'Telugu',
+    exampleMovie: 'Baahubali: The Beginning',
+    exampleHero: 'Prabhas',
+    exampleHeroine: 'Anushka',
+    exampleDirector: 'Rajamouli',
+    exampleMusic: 'M.M. Keeravani',
+    exampleProducer: 'Shobu Yarlagadda',
+    heroMatch: true,
+    heroineMatch: false,
+    directorMatch: false,
+    musicMatch: true,
+    producerMatch: false,
+    summary: 'Hero & Music matched — 3 roles left!',
+  },
+  hi: {
+    industry: 'Hindi',
+    exampleMovie: 'Dangal',
+    exampleHero: 'Aamir Khan',
+    exampleHeroine: 'Fatima Sana Shaikh',
+    exampleDirector: 'Nitesh Tiwari',
+    exampleMusic: 'Pritam',
+    exampleProducer: 'Aamir Khan Productions',
+    heroMatch: true,
+    heroineMatch: false,
+    directorMatch: false,
+    musicMatch: false,
+    producerMatch: true,
+    summary: 'Hero & Producer matched — 3 roles left!',
+  },
+  ta: {
+    industry: 'Tamil',
+    exampleMovie: 'Vikram',
+    exampleHero: 'Kamal Haasan',
+    exampleHeroine: 'Narain',
+    exampleDirector: 'Lokesh Kanagaraj',
+    exampleMusic: 'Anirudh',
+    exampleProducer: 'Raaj Kamal Films',
+    heroMatch: false,
+    heroineMatch: false,
+    directorMatch: false,
+    musicMatch: true,
+    producerMatch: true,
+    summary: 'Music & Producer matched — 3 roles left!',
+  },
+};
+
 /**
- * HowToPlay Modal — Game Instructions
- *
- * Explains the five-column Wordle mechanic:
- *  - Pick a movie from the search bar
- *  - Five fields (Hero, Heroine, Director, Music, Producer) reveal ✅ or ❌
- *  - Match all 5 to win in ≤ 5 guesses
- *
- * Includes a worked visual example so new players understand instantly.
+ * HowToPlay Modal — dynamic per selected language.
+ * Explains the 5-column Wordle mechanic with a worked example
+ * specific to the currently active industry (Tollywood / Bollywood / Kollywood).
  */
-export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
+export default function HowToPlay({ isOpen, onClose, language = 'te' }: HowToPlayProps) {
+  const info = LANG_INFO[language];
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -51,13 +113,13 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
             {/* Rules */}
             <div className="space-y-3 mb-6">
               <p className="text-gray-300 text-sm leading-relaxed">
-                Guess the <span className="text-gold font-bold">secret Telugu movie</span> in 5 tries or fewer!
+                Guess the <span className="text-gold font-bold">secret {info.industry} movie</span> in 5 tries or fewer!
               </p>
               <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300 pl-1">
-                <li>Search for any Telugu movie in the input.</li>
+                <li>Search for any {info.industry} movie in the input.</li>
                 <li>Each guess reveals how five key roles compare to the target.</li>
                 <li>
-                  <span className="inline-block w-4 h-4 bg-wordle-green rounded-sm mr-1 align-middle" /> 
+                  <span className="inline-block w-4 h-4 bg-wordle-green rounded-sm mr-1 align-middle" />
                   <strong className="text-white">Green</strong> = exact match for that role.
                 </li>
                 <li>
@@ -66,38 +128,29 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                 </li>
                 <li>Match all five roles to win 🍿</li>
               </ol>
-              <p className="text-xs text-gray-500 mt-2">A new puzzle drops every day at midnight.</p>
+              <p className="text-xs text-gray-500">A new puzzle drops every day at midnight.</p>
             </div>
 
-            {/* Divider */}
             <div className="border-t border-white/10 mb-5" />
 
-            {/* Visual example */}
-            <h3 className="text-xs uppercase text-gray-500 font-bold tracking-widest mb-3">Example Guess</h3>
+            {/* Visual example — language-specific */}
+            <h3 className="text-xs uppercase text-gray-500 font-bold tracking-widest mb-2">Example Guess</h3>
             <p className="text-xs text-gray-400 mb-3">
-              If you guessed <span className="text-gold font-semibold">Baahubali: The Beginning</span>:
+              If you guessed <span className="text-gold font-semibold">{info.exampleMovie}</span>:
             </p>
 
             <div className="grid grid-cols-5 gap-1 text-center text-[9px] uppercase text-gray-400 mb-1 font-bold tracking-wider">
               <div>Hero</div><div>Heroine</div><div>Director</div><div>Music</div><div>Producer</div>
             </div>
             <div className="grid grid-cols-5 gap-1">
-              {/* Green: Prabhas matched */}
-              <ExampleCell color="green" name="Prabhas" label="✓ Match" />
-              {/* Gray: Anushka wrong */}
-              <ExampleCell color="gray" name="Anushka" label="✗ Wrong" />
-              {/* Gray: Rajamouli wrong */}
-              <ExampleCell color="gray" name="Rajamouli" label="✗ Wrong" />
-              {/* Green: M.M. Keeravani matched */}
-              <ExampleCell color="green" name="M.M. Keeravani" label="✓ Match" />
-              {/* Gray: producer wrong */}
-              <ExampleCell color="gray" name="Shobu" label="✗ Wrong" />
+              <ExampleCell match={info.heroMatch}     name={info.exampleHero}      />
+              <ExampleCell match={info.heroineMatch}  name={info.exampleHeroine}   />
+              <ExampleCell match={info.directorMatch} name={info.exampleDirector}  />
+              <ExampleCell match={info.musicMatch}    name={info.exampleMusic}     />
+              <ExampleCell match={info.producerMatch} name={info.exampleProducer}  />
             </div>
-            <p className="text-xs text-gray-500 mt-4 text-center">
-              Hero & Music matched — only 3 more roles to crack!
-            </p>
+            <p className="text-xs text-gray-500 mt-3 text-center">{info.summary}</p>
 
-            {/* Close CTA */}
             <button
               onClick={onClose}
               className="w-full mt-6 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 transition-colors text-sm"
@@ -111,16 +164,15 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
   );
 }
 
-/** Micro-component for the example rows in the instructions */
-function ExampleCell({ color, name, label }: { color: 'green' | 'gray'; name: string; label: string }) {
+function ExampleCell({ match, name }: { match: boolean; name: string }) {
   return (
     <div
       className={`rounded-lg p-2 text-center flex flex-col items-center justify-center min-h-[60px] ${
-        color === 'green' ? 'bg-wordle-green' : 'bg-wordle-gray'
+        match ? 'bg-wordle-green' : 'bg-wordle-gray'
       }`}
     >
-      <span className="text-white font-bold text-[10px] leading-tight line-clamp-2">{name}</span>
-      <span className="text-white/60 text-[8px] mt-1">{label}</span>
+      <span className="text-white font-bold text-[9px] leading-tight line-clamp-2">{name}</span>
+      <span className="text-white/50 text-[8px] mt-1">{match ? '✓' : '✗'}</span>
     </div>
   );
 }

@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'TFI Wordle - Guess the Tollywood Movie',
-  description: 'The viral word game, for Telugu Cinema lovers.',
+  description: 'The viral word game for Indian Cinema lovers — Tollywood, Bollywood, and Kollywood.',
   icons: {
     icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍿</text></svg>',
   }
