@@ -259,7 +259,8 @@ def _perform_data_refresh(lang: str = 'te'):
     movies: List[Dict[str, Any]] = []
     found_ids: set = set()
 
-    for page in range(1, 6):
+    # Fetch top 500 most popular movies (25 pages) to create a massive, deep pool
+    for page in range(1, 26):
         try:
             url = f"{base_url}/discover/movie"
             params = {
@@ -437,7 +438,8 @@ def search_movies_tmdb(query: str, lang: str = 'te') -> List[Dict[str, Any]]:
     }
 
     all_filtered = []
-    for page in range(1, 4):
+    # Fetch up to 10 pages to maximize search coverage (200 items filtered by lang)
+    for page in range(1, 11):
         params = {
             "query": query,
             "language": "en-US",
