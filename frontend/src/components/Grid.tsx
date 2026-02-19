@@ -30,30 +30,35 @@ export default function Grid({ guesses }: GridProps) {
               label="Hero" 
               status={guess.matches.hero ? 'correct' : 'absent'} 
               delay={0}
+              imageUrl={guess.images?.hero}
             />
             <FlipCard 
               content={guess.values.heroine} 
               label="Heroine" 
               status={guess.matches.heroine ? 'correct' : 'absent'} 
               delay={0.1}
+              imageUrl={guess.images?.heroine}
             />
             <FlipCard 
               content={guess.values.director} 
               label="Director" 
               status={guess.matches.director ? 'correct' : 'absent'} 
               delay={0.2}
+              imageUrl={guess.images?.director}
             />
             <FlipCard 
               content={guess.values.music} 
               label="Music" 
               status={guess.matches.music ? 'correct' : 'absent'} 
               delay={0.3}
+              imageUrl={guess.images?.music}
             />
             <FlipCard 
               content={guess.values.producer} 
               label="Producer" 
               status={guess.matches.producer ? 'correct' : 'absent'} 
               delay={0.4}
+              imageUrl={guess.images?.producer}
             />
           </div>
         </div>

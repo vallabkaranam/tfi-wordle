@@ -12,6 +12,12 @@ class Movie(BaseModel):
     director: str
     music: str
     producer: str
+    # Images for columns (profile_path)
+    hero_pfp: Optional[str] = None
+    heroine_pfp: Optional[str] = None
+    director_pfp: Optional[str] = None
+    music_pfp: Optional[str] = None
+    producer_pfp: Optional[str] = None
 
 class GuessValues(BaseModel):
     hero: str
@@ -19,6 +25,13 @@ class GuessValues(BaseModel):
     director: str
     music: str
     producer: str
+    
+class GuessImages(BaseModel):
+    hero: Optional[str] = None
+    heroine: Optional[str] = None
+    director: Optional[str] = None
+    music: Optional[str] = None
+    producer: Optional[str] = None
 
 class GuessMatches(BaseModel):
     hero: bool
@@ -32,6 +45,7 @@ class GuessResult(BaseModel):
     title: str
     poster_path: Optional[str] = None
     values: GuessValues
+    images: Optional[GuessImages] = None
     matches: GuessMatches
 
 class GuessRequest(BaseModel):

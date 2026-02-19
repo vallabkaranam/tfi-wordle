@@ -9,6 +9,12 @@ export interface Movie {
   director: string;
   music: string;
   producer: string;
+  // Images
+  hero_pfp?: string;
+  heroine_pfp?: string;
+  director_pfp?: string;
+  music_pfp?: string;
+  producer_pfp?: string;
 }
 
 export interface GuessValues {
@@ -17,6 +23,14 @@ export interface GuessValues {
   director: string;
   music: string;
   producer: string;
+}
+
+export interface GuessImages {
+  hero?: string;
+  heroine?: string;
+  director?: string;
+  music?: string;
+  producer?: string;
 }
 
 export interface GuessMatches {
@@ -33,6 +47,7 @@ export interface GuessResult {
   poster_path?: string;
   values: GuessValues;
   matches: GuessMatches;
+  images?: GuessImages;
 }
 
 export interface GuessResponse {

@@ -6,7 +6,7 @@ from datetime import date
 import random
 import threading
 from typing import List, Dict, Optional, Any
-from ..models.schemas import Movie, GuessResult, GuessValues, GuessMatches, GuessResponse
+from ..models.schemas import Movie, GuessResult, GuessValues, GuessImages, GuessMatches, GuessResponse
 
 # -------------------------------------------------------------------
 # CONFIG & STATE
@@ -44,6 +44,63 @@ def _load_local_metadata() -> Dict[int, Dict[str, Any]]:
         return {}
 
 # -------------------------------------------------------------------
+# HELPER: IMAGE EXTRACTION
+# -------------------------------------------------------------------
+
+def _extract_person_images(credits: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """
+    Tries to find profile_paths for hero, heroine, director, music, producer
+    by name matching in the credits object.
+    """
+    images = {
+        "hero_pfp": None,
+        "heroine_pfp": None,
+        "director_pfp": None,
+        "music_pfp": None,
+        "producer_pfp": None
+    }
+    
+    # 1. Build lookup maps (Name -> Profile Path)
+    # Prioritize people with profile_paths
+    person_map = {}
+    
+    # Cast
+    for p in credits.get("cast", []):
+        name = p.get("name")
+        path = p.get("profile_path")
+        if name and path:
+            person_map[name.lower()] = path
+            
+    # Crew
+    for p in credits.get("crew", []):
+        name = p.get("name")
+        path = p.get("profile_path")
+        if name and path:
+            person_map[name.lower()] = path
+
+    # 2. Lookup metadata names
+    # Helper to check partial match or exact match
+    def find_image(role_name: str) -> Optional[str]:
+        if not role_name: return None
+        role_lower = role_name.lower()
+        
+        # Exact match
+        if role_lower in person_map:
+            return person_map[role_lower]
+            
+        # Fallback: fuzzy or first name match could be dangerous, so stick to exact or very close
+        # For now, strict name matching to ensure quality.
+        return None
+
+    images["hero_pfp"] = find_image(meta.get("hero"))
+    images["heroine_pfp"] = find_image(meta.get("heroine"))
+    images["director_pfp"] = find_image(meta.get("director"))
+    images["music_pfp"] = find_image(meta.get("music"))
+    images["producer_pfp"] = find_image(meta.get("producer"))
+    
+    return images
+
+# -------------------------------------------------------------------
 # DATA FETCH & JOIN LOGIC
 # -------------------------------------------------------------------
 
@@ -64,8 +121,15 @@ def _perform_data_refresh():
         "Content-Type": "application/json;charset=utf-8"
     }
 
-    print("Starting TMDB fetch (Top 100)...")
+    print("Starting TMDB fetch (Top 100 with Credits)...")
     found_ids = set()
+    
+    # Batch strategy: We might need to fetch individual details if discover doesn't give credits
+    # /discover/movie DOES NOT return credits.
+    # We must fetch the list first, then fetch details for each relevant one.
+    # This is expensive. 30 movies = 30 API calls. But fine for startup.
+    
+    # Optimization: Only fetch sorted popular list, filter by metadata map, THEN fetch details.
     
     for page in range(1, 6):
         try:
@@ -86,27 +150,57 @@ def _perform_data_refresh():
             for item in results:
                 tmdb_id = item["id"]
                 if tmdb_id in metadata_map and tmdb_id not in found_ids:
+                    
+                    # 1. Basic Filter
                     rel_date = item.get("release_date", "")
                     if not rel_date: continue
                     try:
                         if date.fromisoformat(rel_date) > date.today(): continue
                     except ValueError: continue
-
-                    meta = metadata_map[tmdb_id]
-                    full_movie = {
-                        "id": tmdb_id,
-                        "title": item["title"],
-                        "year": int(rel_date[:4]),
-                        "language": item.get("original_language", "te"),
-                        "poster_path": item.get("poster_path"),
-                        "hero": meta["hero"],
-                        "heroine": meta["heroine"],
-                        "director": meta["director"],
-                        "music": meta["music"],
-                        "producer": meta["producer"]
-                    }
-                    movies.append(full_movie)
-                    found_ids.add(tmdb_id)
+                    
+                    # 2. Fetch Full Details + Credits for Images
+                    # API Rate limiting might be an issue? sequential is slow but safe.
+                    # 30-40 calls is fine.
+                    try:
+                        detail_url = f"{base_url}/movie/{tmdb_id}"
+                        detail_params = {"append_to_response": "credits"}
+                        detail_res = requests.get(detail_url, headers=headers, params=detail_params)
+                        
+                        if detail_res.status_code == 200:
+                            details = detail_res.json()
+                            credits = details.get("credits", {})
+                        else:
+                            # Fallback to item
+                            credits = {}
+                            
+                        meta = metadata_map[tmdb_id]
+                        images = _extract_person_images(credits, meta)
+                        
+                        full_movie = {
+                            "id": tmdb_id,
+                            "title": item["title"],
+                            "year": int(rel_date[:4]),
+                            "language": item.get("original_language", "te"),
+                            "poster_path": item.get("poster_path"),
+                            "hero": meta["hero"],
+                            "heroine": meta["heroine"],
+                            "director": meta["director"],
+                            "music": meta["music"],
+                            "producer": meta["producer"],
+                            
+                            # Images
+                            "hero_pfp": images["hero_pfp"],
+                            "heroine_pfp": images["heroine_pfp"],
+                            "director_pfp": images["director_pfp"],
+                            "music_pfp": images["music_pfp"],
+                            "producer_pfp": images["producer_pfp"]
+                        }
+                        movies.append(full_movie)
+                        found_ids.add(tmdb_id)
+                        
+                    except Exception as e:
+                        print(f"[WARN] Failed to fetch details for {tmdb_id}: {e}")
+                        
         except Exception as e:
             print(f"[ERROR] Exception during fetch page {page}: {e}")
             break
@@ -137,12 +231,11 @@ def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
 def get_daily_movie() -> Dict[str, Any]:
     movies = fetch_top_telugu_movies()
     if not movies:
-        return {"id": 0, "title": "Error"} # Simplified fallback
+        return {"id": 0, "title": "Error"} 
         
     today = date.today()
-    seed_str = f"{today.year}-{today.month}-{today.day}-v1" # v1 seed version
+    seed_str = f"{today.year}-{today.month}-{today.day}-v1"
     random.seed(seed_str)
-    # Sort by ID to ensure unstable list order doesn't affect choice
     sorted_movies = sorted(movies, key=lambda x: x["id"])
     return random.choice(sorted_movies)
 
@@ -152,7 +245,6 @@ def process_guess(guess_id: int, previous_attempts: List[GuessResult]) -> GuessR
     
     guess_movie = next((m for m in movies if m["id"] == guess_id), None)
     
-    # Invalid guess ID
     if not guess_movie:
         return GuessResponse(
             valid=False,
@@ -167,19 +259,27 @@ def process_guess(guess_id: int, previous_attempts: List[GuessResult]) -> GuessR
         id=guess_movie["id"],
         title=guess_movie["title"],
         poster_path=guess_movie.get("poster_path"),
+        
         values=GuessValues(
             hero=guess_movie["hero"],
             heroine=guess_movie["heroine"],
             director=guess_movie["director"],
             music=guess_movie["music"],
-            music=guess_movie["music"],
             producer=guess_movie["producer"]
         ),
+        
+        images=GuessImages(
+            hero=guess_movie.get("hero_pfp"),
+            heroine=guess_movie.get("heroine_pfp"),
+            director=guess_movie.get("director_pfp"),
+            music=guess_movie.get("music_pfp"),
+            producer=guess_movie.get("producer_pfp")
+        ),
+        
         matches=GuessMatches(
             hero=(guess_movie["hero"] == target["hero"]),
             heroine=(guess_movie["heroine"] == target["heroine"]),
             director=(guess_movie["director"] == target["director"]),
-            music=(guess_movie["music"] == target["music"]),
             music=(guess_movie["music"] == target["music"]),
             producer=(guess_movie["producer"] == target["producer"])
         )
