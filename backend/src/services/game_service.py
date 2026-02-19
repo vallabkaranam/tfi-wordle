@@ -320,34 +320,50 @@ def search_movies_tmdb(query: str) -> List[Dict[str, Any]]:
         "Authorization": f"Bearer {TMDB_READ_TOKEN}",
         "Content-Type": "application/json;charset=utf-8"
     }
-    params = {
-        "query": query,
-        "language": "en-US",
-        "page": 1,
-        "include_adult": False
-        # Cannot strictly filter by original_language=te easily in search endpoint 
-        # without filtering results manually.
-    }
     
-    try:
-        res = requests.get(url, headers=headers, params=params)
-        if res.status_code == 200:
-            results = res.json().get("results", [])
-            # Filter for Telugu or at least likely candidates?
-            # User said "any and every Telugu movie".
-            filtered = []
-            for m in results:
-                if m.get("original_language") == "te":
-                    filtered.append({
-                        "id": m["id"],
-                        "title": m["title"],
-                        "year": int(m["release_date"][:4]) if m.get("release_date") else 0
-                    })
-            return filtered
-    except Exception as e:
-        print(f"[ERROR] Search failed: {e}")
+    # Increase probability of finding Telugu matches by fetching 2 pages and using region IN
+    all_filtered = []
+    for page in range(1, 4): # Fetch up to 3 pages to find as many te movies as possible
+        params = {
+            "query": query,
+            "language": "en-US",
+            "page": page,
+            "region": "IN",
+            "include_adult": False
+        }
         
-    return []
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            if res.status_code == 200:
+                results = res.json().get("results", [])
+                for m in results:
+                    # Strictly Telugu or if it's explicitly marked as such in popularity metrics?
+                    # Stick to te original language for "Telugu Movie Wordle"
+                    if m.get("original_language") == "te":
+                        all_filtered.append({
+                            "id": m["id"],
+                            "title": m["title"],
+                            "year": int(m["release_date"][:4]) if m.get("release_date") else 0
+                        })
+                
+                # If we have enough results, stop
+                if len(all_filtered) >= 15:
+                    break
+            else:
+                break
+        except Exception as e:
+            print(f"[ERROR] Search failed on page {page}: {e}")
+            break
+            
+    # Dedupe by id
+    seen = set()
+    unique = []
+    for m in all_filtered:
+        if m["id"] not in seen:
+            unique.append(m)
+            seen.add(m["id"])
+            
+    return unique[:20]
 
 def get_daily_movie(seed: Optional[int] = None) -> Dict[str, Any]:
     movies = fetch_top_telugu_movies()
