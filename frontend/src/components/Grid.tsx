@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useMemo } from 'react';
 import { GuessResult } from '../lib/types';
 import FlipCard from './FlipCard';
 
@@ -16,6 +17,8 @@ interface GridProps {
  * - Map each guess into a structured row containing FlipCards for validation feedback.
  */
 export default function Grid({ guesses }: GridProps) {
+  const reversedGuesses = useMemo(() => [...guesses].reverse(), [guesses]);
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-3 sm:space-y-4 pb-20">
       
@@ -30,9 +33,9 @@ export default function Grid({ guesses }: GridProps) {
       
       {/* 
           Guess Rows:
-          [...guesses].reverse() ensures the user sees their latest guess immediately at the top.
+          reversedGuesses ensures the user sees their latest guess immediately at the top.
       */}
-      {[...guesses].reverse().map((guess, i) => (
+      {reversedGuesses.map((guess, i) => (
         <div key={`${guess.id}-${i}`} className="bg-cinema-light/40 p-2 sm:p-4 rounded-xl border border-white/5 shadow-sm hover:border-white/10 transition-colors">
           
           {/* Guess Title: Large gold text identifying the movie picked */}

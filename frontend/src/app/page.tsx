@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchMovies, submitGuess } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
 import { loadStats, recordGame, GameStats } from '../lib/stats';
@@ -78,9 +78,10 @@ export default function Home() {
   const countdown = useCountdown();
 
   // Derived: total wrong guesses (no field matched at all)
-  const wrongGuesses = guesses.filter(
-    g => !g.matches.hero && !g.matches.heroine && !g.matches.director && !g.matches.music && !g.matches.producer
-  ).length;
+  const wrongGuesses = useMemo(() => 
+    guesses.filter(g => !g.matches.hero && !g.matches.heroine && !g.matches.director && !g.matches.music && !g.matches.producer).length,
+    [guesses]
+  );
 
   // ---------------------------------------------------------------------------
   // Game reset helper — shared by language switch and mode switch
