@@ -107,11 +107,12 @@ export default function Home() {
 
       if (response.status === 'won') {
         if (response.answer) setTarget(response.answer);
-        setStats(recordGame(true, response.attempts.length));
+        // Only record stats for daily mode — random games shouldn't affect streak
+        if (!isRandom) setStats(recordGame(true, response.attempts.length));
         triggerConfetti();
       } else if (response.status === 'lost') {
         if (response.answer) setTarget(response.answer);
-        setStats(recordGame(false, response.attempts.length));
+        if (!isRandom) setStats(recordGame(false, response.attempts.length));
       }
     } catch (err) {
       console.error('Guess error:', err);
@@ -261,9 +262,6 @@ export default function Home() {
                 <h2 className="text-2xl font-black text-gold tracking-tight">BLOCKBUSTER!</h2>
                 <p className="text-gray-400 text-sm mt-1">
                   Cracked it in <span className="text-white font-bold">{guesses.length}</span> guess{guesses.length !== 1 ? 'es' : ''}
-                  {stats.currentStreak > 1 && (
-                    <span className="ml-2 text-gold/80">· 🔥 {stats.currentStreak}-day streak</span>
-                  )}
                 </p>
               </div>
             ) : (

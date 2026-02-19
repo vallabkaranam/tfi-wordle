@@ -355,15 +355,20 @@ def _perform_data_refresh(lang: str = 'te'):
 def initialize_movie_data(background: bool = False):
     """
     Entry point called at application startup.
-    Refreshes caches for all supported languages.
-    If background=True, each language refresh runs in its own daemon thread.
+
+    Telugu is always loaded synchronously (foreground) so the cache is
+    ready before the first request hits the server.
+    Hindi and Tamil are loaded in background threads to avoid blocking startup.
     """
-    print("[INFO] Initializing Movie Data Layer (te + hi + ta)...")
-    for lang in SUPPORTED_LANGS:
-        if background:
-            threading.Thread(target=_perform_data_refresh, args=(lang,), daemon=True).start()
-        else:
-            _perform_data_refresh(lang)
+    print("[INFO] Initializing Movie Data Layer...")
+
+    # Telugu — foreground (blocking): ensures immediate availability
+    _perform_data_refresh('te')
+
+    # Hindi + Tamil — background: users can switch to these shortly after startup
+    for lang in ('hi', 'ta'):
+        threading.Thread(target=_perform_data_refresh, args=(lang,), daemon=True).start()
+
 
 # -------------------------------------------------------------------
 # PUBLIC API & GAME LOGIC
