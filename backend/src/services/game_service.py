@@ -87,9 +87,6 @@ def _extract_person_images(credits: Dict[str, Any], meta: Dict[str, Any]) -> Dic
         # Exact match
         if role_lower in person_map:
             return person_map[role_lower]
-            
-        # Fallback: fuzzy or first name match could be dangerous, so stick to exact or very close
-        # For now, strict name matching to ensure quality.
         return None
 
     images["hero_pfp"] = find_image(meta.get("hero"))
@@ -99,6 +96,106 @@ def _extract_person_images(credits: Dict[str, Any], meta: Dict[str, Any]) -> Dic
     images["producer_pfp"] = find_image(meta.get("producer"))
     
     return images
+
+# -------------------------------------------------------------------
+# HELPER: LIVE ENRICHMENT
+# -------------------------------------------------------------------
+
+def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetches details + credits from TMDB for a given ID and tries to construct
+    a Movie object using heuristics if metadata is missing.
+    """
+    if not TMDB_READ_TOKEN: return None
+    
+    base_url = "https://api.themoviedb.org/3"
+    headers = {
+        "Authorization": f"Bearer {TMDB_READ_TOKEN}",
+        "Content-Type": "application/json;charset=utf-8"
+    }
+
+    try:
+        url = f"{base_url}/movie/{tmdb_id}?append_to_response=credits"
+        res = requests.get(url, headers=headers)
+        if res.status_code != 200: return None
+        
+        data = res.json()
+        credits = data.get("credits", {})
+        cast = credits.get("cast", [])
+        crew = credits.get("crew", [])
+        
+        # Heuristics
+        hero_val = "Unknown"
+        hero_pfp_val = None
+        heroine_val = "Unknown"
+        heroine_pfp_val = None
+        director_val = "Unknown"
+        director_pfp_val = None
+        music_val = "Unknown"
+        music_pfp_val = None
+        producer_val = "Unknown"
+        producer_pfp_val = None
+
+        # Hero: First Male (gender=2) 
+        # or just first cast member if gender undefined is safer for top billing?
+        # Let's try finding first male
+        hero_actor = next((c for c in cast if c.get("gender") == 2), None)
+        # Fallback to first cast member if no male found (rare)
+        if not hero_actor and cast: hero_actor = cast[0]
+        
+        if hero_actor:
+            hero_val = hero_actor["name"]
+            hero_pfp_val = hero_actor.get("profile_path")
+
+        # Heroine: First Female (gender=1)
+        heroine_actor = next((c for c in cast if c.get("gender") == 1), None)
+        if heroine_actor:
+            heroine_val = heroine_actor["name"]
+            heroine_pfp_val = heroine_actor.get("profile_path")
+            
+        # Director
+        director_crew = next((c for c in crew if c.get("job") == "Director"), None)
+        if director_crew:
+            director_val = director_crew["name"]
+            director_pfp_val = director_crew.get("profile_path")
+
+        # Music
+        music_crew = next((c for c in crew if c.get("job") in ["Original Music Composer", "Music"]), None)
+        if music_crew:
+            music_val = music_crew["name"]
+            music_pfp_val = music_crew.get("profile_path")
+            
+        # Producer
+        producer_crew = next((c for c in crew if c.get("job") == "Producer"), None)
+        if producer_crew:
+            producer_val = producer_crew["name"]
+            producer_pfp_val = producer_crew.get("profile_path")
+
+        release_date = data.get("release_date", "")
+        year = int(release_date[:4]) if release_date else 0
+
+        return {
+            "id": tmdb_id,
+            "title": data["title"],
+            "year": year,
+            "language": data.get("original_language", "te"),
+            "poster_path": data.get("poster_path"),
+            "hero": hero_val,
+            "heroine": heroine_val,
+            "director": director_val,
+            "music": music_val,
+            "producer": producer_val,
+            
+            "hero_pfp": hero_pfp_val,
+            "heroine_pfp": heroine_pfp_val,
+            "director_pfp": director_pfp_val,
+            "music_pfp": music_pfp_val,
+            "producer_pfp": producer_pfp_val
+        }
+
+    except Exception as e:
+        print(f"[WARN] Live fetch failed for {tmdb_id}: {e}")
+        return None
 
 # -------------------------------------------------------------------
 # DATA FETCH & JOIN LOGIC
@@ -124,13 +221,6 @@ def _perform_data_refresh():
     print("Starting TMDB fetch (Top 100 with Credits)...")
     found_ids = set()
     
-    # Batch strategy: We might need to fetch individual details if discover doesn't give credits
-    # /discover/movie DOES NOT return credits.
-    # We must fetch the list first, then fetch details for each relevant one.
-    # This is expensive. 30 movies = 30 API calls. But fine for startup.
-    
-    # Optimization: Only fetch sorted popular list, filter by metadata map, THEN fetch details.
-    
     for page in range(1, 6):
         try:
             url = f"{base_url}/discover/movie"
@@ -151,16 +241,12 @@ def _perform_data_refresh():
                 tmdb_id = item["id"]
                 if tmdb_id in metadata_map and tmdb_id not in found_ids:
                     
-                    # 1. Basic Filter
                     rel_date = item.get("release_date", "")
                     if not rel_date: continue
                     try:
                         if date.fromisoformat(rel_date) > date.today(): continue
                     except ValueError: continue
                     
-                    # 2. Fetch Full Details + Credits for Images
-                    # API Rate limiting might be an issue? sequential is slow but safe.
-                    # 30-40 calls is fine.
                     try:
                         detail_url = f"{base_url}/movie/{tmdb_id}"
                         detail_params = {"append_to_response": "credits"}
@@ -170,7 +256,6 @@ def _perform_data_refresh():
                             details = detail_res.json()
                             credits = details.get("credits", {})
                         else:
-                            # Fallback to item
                             credits = {}
                             
                         meta = metadata_map[tmdb_id]
@@ -188,7 +273,6 @@ def _perform_data_refresh():
                             "music": meta["music"],
                             "producer": meta["producer"],
                             
-                            # Images
                             "hero_pfp": images["hero_pfp"],
                             "heroine_pfp": images["heroine_pfp"],
                             "director_pfp": images["director_pfp"],
@@ -227,6 +311,43 @@ def initialize_movie_data(background: bool = False):
 def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
     with _CACHE_LOCK:
         return list(_MOVIES_CACHE)
+        
+def search_movies_tmdb(query: str) -> List[Dict[str, Any]]:
+    if not TMDB_READ_TOKEN: return []
+    
+    url = "https://api.themoviedb.org/3/search/movie"
+    headers = {
+        "Authorization": f"Bearer {TMDB_READ_TOKEN}",
+        "Content-Type": "application/json;charset=utf-8"
+    }
+    params = {
+        "query": query,
+        "language": "en-US",
+        "page": 1,
+        "include_adult": False
+        # Cannot strictly filter by original_language=te easily in search endpoint 
+        # without filtering results manually.
+    }
+    
+    try:
+        res = requests.get(url, headers=headers, params=params)
+        if res.status_code == 200:
+            results = res.json().get("results", [])
+            # Filter for Telugu or at least likely candidates?
+            # User said "any and every Telugu movie".
+            filtered = []
+            for m in results:
+                if m.get("original_language") == "te":
+                    filtered.append({
+                        "id": m["id"],
+                        "title": m["title"],
+                        "year": int(m["release_date"][:4]) if m.get("release_date") else 0
+                    })
+            return filtered
+    except Exception as e:
+        print(f"[ERROR] Search failed: {e}")
+        
+    return []
 
 def get_daily_movie(seed: Optional[int] = None) -> Dict[str, Any]:
     movies = fetch_top_telugu_movies()
@@ -234,10 +355,8 @@ def get_daily_movie(seed: Optional[int] = None) -> Dict[str, Any]:
         return {"id": 0, "title": "Error"} 
         
     if seed is not None:
-        # Unlimited Mode: Deterministic for this user session seed
         random.seed(seed)
     else:
-        # Daily Mode: Deterministic per day
         today = date.today()
         seed_str = f"{today.year}-{today.month}-{today.day}-v1"
         random.seed(seed_str)
@@ -249,7 +368,12 @@ def process_guess(guess_id: int, previous_attempts: List[GuessResult], seed: Opt
     target = get_daily_movie(seed)
     movies = fetch_top_telugu_movies()
     
+    # 1. Try Cache first
     guess_movie = next((m for m in movies if m["id"] == guess_id), None)
+    
+    # 2. If not in cache, try Live Fetch
+    if not guess_movie:
+        guess_movie = _enrich_from_tmdb_live(guess_id)
     
     if not guess_movie:
         return GuessResponse(

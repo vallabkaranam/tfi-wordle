@@ -19,7 +19,7 @@ export default function Grid({ guesses }: GridProps) {
         <div>Producer</div>
       </div>
       
-      {guesses.map((guess, i) => (
+      {[...guesses].reverse().map((guess, i) => (
         <div key={i} className="bg-cinema-light/50 p-2 sm:p-4 rounded-xl border border-white/5 shadow-sm">
           <div className="text-white font-bold text-sm sm:text-lg mb-2 text-center text-gold flex items-center justify-center gap-2 truncate px-1">
             {guess.title}
