@@ -4,6 +4,8 @@
 
 ![TFI Wordle Logo](https://img.shields.io/badge/TFI--Wordle-Cinema-gold?style=for-the-badge)
 
+https://tfi-wordle-frontend.onrender.com
+
 ## ✨ Features
 
 -   **📽️ Three Film Industries**: Seamlessly toggle between Telugu, Hindi, and Tamil modes. Each mode features its own industry-specific data pool, theme, and daily puzzles.
