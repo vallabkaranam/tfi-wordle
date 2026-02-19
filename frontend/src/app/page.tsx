@@ -7,7 +7,6 @@ import { loadStats, recordGame, GameStats } from '../lib/stats';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
 import StatsModal from '../components/StatsModal';
-import StatsTicker from '../components/StatsTicker';
 import HintPoster from '../components/HintPoster';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
@@ -35,10 +34,10 @@ function useCountdown(): string {
 }
 
 // Per-language colour theme
-const LANG_THEME: Record<Language, { accent: string; accentBg: string; industry: string }> = {
-  te: { accent: 'text-gold',       accentBg: 'bg-yellow-500/10', industry: 'Tollywood' },
-  hi: { accent: 'text-orange-400', accentBg: 'bg-orange-500/10', industry: 'Bollywood' },
-  ta: { accent: 'text-red-400',    accentBg: 'bg-red-500/10',    industry: 'Kollywood' },
+const LANG_THEME: Record<Language, { accent: string; accentBg: string; industry: string; label: string }> = {
+  te: { accent: 'text-gold',       accentBg: 'bg-yellow-500/10', industry: 'Tollywood', label: 'TFI' },
+  hi: { accent: 'text-orange-400', accentBg: 'bg-orange-500/10', industry: 'Bollywood', label: 'BFI' },
+  ta: { accent: 'text-red-400',    accentBg: 'bg-red-500/10',    industry: 'Kollywood', label: 'KFI' },
 };
 
 /**
@@ -159,7 +158,7 @@ export default function Home() {
 
         {/* Brand */}
         <h1 className="text-xl font-bold tracking-tighter shrink-0 mr-1">
-          <span className={theme.accent}>TFI</span>
+          <span className={theme.accent}>{theme.label}</span>
           <span className="text-white"> WORDLE</span>
         </h1>
 
@@ -214,11 +213,6 @@ export default function Home() {
           </button>
         </div>
       </header>
-
-      {/* ── Ticker ── */}
-      <StatsTicker />
-
-      {/* ── Game area ── */}
       <div className="w-full max-w-5xl flex-1 px-4 pt-5 pb-24">
 
         {/* Context strip */}

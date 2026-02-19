@@ -113,10 +113,10 @@ export default function HowToPlay({ isOpen, onClose, language = 'te' }: HowToPla
             {/* Rules */}
             <div className="space-y-3 mb-6">
               <p className="text-gray-300 text-sm leading-relaxed">
-                Guess the <span className="text-gold font-bold">secret {info.industry} movie</span> in 5 tries or fewer!
+                Guess the <span className="text-gold font-bold">secret movie</span> in 5 tries or fewer!
               </p>
               <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300 pl-1">
-                <li>Search for any {info.industry} movie in the input.</li>
+                <li>Search for any movie in the input.</li>
                 <li>Each guess reveals how five key roles compare to the target.</li>
                 <li>
                   <span className="inline-block w-4 h-4 bg-wordle-green rounded-sm mr-1 align-middle" />
