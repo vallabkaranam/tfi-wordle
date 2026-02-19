@@ -20,18 +20,21 @@ _MOVIES_CACHE: List[Dict[str, Any]] = []
 _CACHE_LOCK = threading.RLock()
 
 def load_fallback_data() -> List[Dict[str, Any]]:
-    """Loads the committed JSON dataset as a deterministic fallback."""
+    """
+    Loads the committed JSON dataset as a fallback for DEVELOPMENT ONLY.
+    Should NEVER be used in production if TMDB_READ_TOKEN is set.
+    """
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                print(f"Loaded {len(data)} movies from fallback dataset.")
+                print(f"[WARNING] Loaded {len(data)} movies from LOCAL FALLBACK dataset.")
                 return data
         else:
-            print(f"Fallback dataset not found at {DATA_FILE}")
+            print(f"[WARNING] Fallback dataset not found at {DATA_FILE}")
             return []
     except Exception as e:
-        print(f"Error loading fallback dataset: {e}")
+        print(f"[ERROR] Error loading fallback dataset: {e}")
         return []
 
 def _normalize_tmdb_movie(tmdb_item: Dict[str, Any], credits: Dict[str, Any], details: Dict[str, Any]) -> Dict[str, Any]:
@@ -92,8 +95,8 @@ def _perform_tmdb_fetch():
     }
 
     print("Starting background TMDB fetch...")
-    # Fetching top ~500 popular Telugu movies (25 pages * 20 results)
-    for page in range(1, 26):
+    # Fetching top ~100 popular Telugu movies (5 pages * 20 results) to avoid startup timeout
+    for page in range(1, 6):
         try:
             url = f"{base_url}/discover/movie"
             params = {
@@ -101,7 +104,8 @@ def _perform_tmdb_fetch():
                 "with_original_language": "te",
                 "sort_by": "popularity.desc",
                 "page": page,
-                "vote_count.gte": 10
+                "page": page,
+                "vote_count.gte": 5
             }
 
             res = requests.get(url, headers=headers, params=params)
@@ -159,30 +163,41 @@ def _perform_tmdb_fetch():
     print(f"TMDB fetch complete. Loaded {len(movies)} movies.")
 
 
-def initialize_movie_data(background: bool = True):
+def initialize_movie_data(background: bool = False):
     """
     Called on startup.
     Strategy:
-    1. Load strictly from committed fallback (guarantees availability).
-    2. If TMDB_READ_TOKEN exists, trigger background fetch to refresh cache with live data.
+    1. If TMDB_READ_TOKEN is present:
+       - BLOCK and fetch data immediately.
+       - If fetch fails, we DO NOT fall back. We want to fail fast or run with empty/partial data rather than stale mock data.
+    2. If TMDB_READ_TOKEN is missing:
+       - Load from local JSON (Dev/Offline mode).
     """
     global _MOVIES_CACHE
 
-    # 1. Load committed fallback first (Baseline)
-    fallback_data = load_fallback_data()
-    with _CACHE_LOCK:
-        if fallback_data:
-            _MOVIES_CACHE = fallback_data
-    
-    # 2. Trigger background refresh if token exists
     if TMDB_READ_TOKEN:
-        if background:
-            print("Triggering background TMDB refresh...")
-            threading.Thread(target=_perform_tmdb_fetch, daemon=True).start()
+        print(f"[INFO] TMDB_READ_TOKEN found. Initializing LIVE data fetch (Blocking)...")
+        _perform_tmdb_fetch()
+        
+        # Validation: Ensure we actually got data
+        with _CACHE_LOCK:
+            count = len(_MOVIES_CACHE)
+        
+        if count == 0:
+            print("[CRITICAL] TMDB fetch yielded 0 movies! Please check your token and API availability.")
         else:
-            _perform_tmdb_fetch()
+            print(f"[SUCCESS] Successfully initialized with {count} movies from TMDB.")
+            # Verify data quality on first item
+            with _CACHE_LOCK:
+                first = _MOVIES_CACHE[0]
+                print(f"[DEBUG] Sample Data: ID={first.get('id')} Title='{first.get('title')}' Poster='{first.get('poster_path')}'")
+
     else:
-        print("No TMDB_READ_TOKEN. Running in offline/fallback mode (no background fetch).")
+        print("[WARN] No TMDB_READ_TOKEN. Using OFFLINE fallback data.")
+        fallback_data = load_fallback_data()
+        with _CACHE_LOCK:
+            if fallback_data:
+                _MOVIES_CACHE = fallback_data
 
 
 def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
