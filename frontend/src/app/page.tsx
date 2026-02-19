@@ -41,9 +41,18 @@ const LANG_THEME: Record<Language, { accent: string; accentBg: string; industry:
   ta: { accent: 'text-red-400',    accentBg: 'bg-red-500/10',    industry: 'Kollywood' },
 };
 
-// ---------------------------------------------------------------------------
-// Home — Main game page
-// ---------------------------------------------------------------------------
+/**
+ * Home Component
+ * --------------
+ * The heart of the TFI Wordle experience. Orchestrates state management
+ * for different languages (Telugu, Hindi, Tamil) and game modes (Daily vs Random).
+ * 
+ * Features:
+ * - Language Switching with industry-specific themes.
+ * - Mode Toggling: Daily (seeded by date) vs Random (infinite playability).
+ * - Persistence: Game statistics saved via localStorage.
+ * - Visuals: Dynamic backgrounds, confetti on win, and responsive grid.
+ */
 export default function Home() {
   // Game mode — undefined seed = daily, number seed = random
   const [seed, setSeed] = useState<number | undefined>(undefined);
