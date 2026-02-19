@@ -48,7 +48,7 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
            ) : null}
            
            {label && <span className="text-[10px] text-white/70 uppercase mb-1 z-10">{label}</span>}
-           <span className="text-sm font-bold text-white z-10 leading-tight">{content}</span>
+           <span className="text-xs sm:text-sm font-bold text-white z-10 leading-tight line-clamp-2">{content}</span>
         </div>
       </motion.div>
     </div>
