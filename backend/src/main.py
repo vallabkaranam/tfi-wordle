@@ -1,16 +1,19 @@
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from contextlib import asynccontextmanager
 from .data_fetcher import fetch_top_telugu_movies, get_daily_movie, check_guess, TMDB_API_KEY, initialize_movie_data
 import os
 
-app = FastAPI()
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize data
     initialize_movie_data(background=True)
+    yield
+    # Shutdown: Clean up if needed (nothing for now)
+
+app = FastAPI(lifespan=lifespan)
 
 # Allow CORS for local development
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
