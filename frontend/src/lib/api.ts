@@ -18,3 +18,9 @@ export async function submitGuess(title: string): Promise<{ guess: GuessResult, 
   if (!res.ok) throw new Error('Failed to submit guess');
   return res.json();
 }
+
+export async function fetchDailyMovie(): Promise<Movie> {
+  const res = await fetch(`${API_BASE}/daily`);
+  if (!res.ok) throw new Error('Failed to fetch daily movie');
+  return res.json();
+}

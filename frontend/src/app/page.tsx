@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchMovies, submitGuess } from '../lib/api';
+import { fetchMovies, submitGuess, fetchDailyMovie } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
@@ -30,10 +29,8 @@ export default function Home() {
       } else if (guesses.length >= 5) {
          // Simple 6 guess limit logic (5 previous + 1 current = 6)
          setGameStatus('lost');
-         // We should fetch the actual target to show it
-         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-         const dailyRes = await fetch(`${apiUrl}/daily`);
-         const dailyData = await dailyRes.json();
+         // Use the API client function instead of correct raw fetch
+         const dailyData = await fetchDailyMovie();
          setTarget(dailyData);
       }
     } catch (e) {

@@ -5,13 +5,13 @@ import json
 from datetime import date
 import random
 import threading
-import concurrent.futures
+from typing import List, Dict, Optional, Any
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 CACHE_FILE = "movies_cache.json"
 
 # Singleton In-Memory Cache
-_MOVIES_CACHE = []
+_MOVIES_CACHE: List[Dict[str, Any]] = []
 _CACHE_LOCK = threading.RLock()
 _FETCH_IN_PROGRESS = False
 
@@ -31,7 +31,7 @@ MOCK_MOVIES = [
         "id": 2,
         "title": "RRR",
         "hero": "N. T. Rama Rao Jr.",
-        "heroine": "Alia Bhatt", # Simplified to one
+        "heroine": "Alia Bhatt",
         "director": "S. S. Rajamouli",
         "music": "M. M. Keeravani",
         "producer": "DVV Entertainment",
@@ -156,7 +156,7 @@ def _perform_tmdb_fetch():
     print(f"TMDB fetch complete. Loaded {len(movies)} movies.")
 
 
-def initialize_movie_data(background=True):
+def initialize_movie_data(background: bool = True):
     """
     Called on startup.
     1. Tries to load from disk immediately (fast).
@@ -193,7 +193,7 @@ def initialize_movie_data(background=True):
         _perform_tmdb_fetch()
 
 
-def fetch_top_telugu_movies():
+def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
     """
     Returns the current in-memory cache.
     If cache is empty (fetch in progress), returns MOCK_MOVIES as fallback to ensure app works.
@@ -206,7 +206,7 @@ def fetch_top_telugu_movies():
         # Return mocks so the app is usable.
         return MOCK_MOVIES
 
-def get_daily_movie():
+def get_daily_movie() -> Dict[str, Any]:
     movies = fetch_top_telugu_movies()
     today = date.today()
     seed_str = f"{today.year}-{today.month}-{today.day}"
@@ -217,7 +217,7 @@ def get_daily_movie():
         
     return random.choice(movies)
 
-def check_guess(guess_title, target):
+def check_guess(guess_title: str, target: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     movies = fetch_top_telugu_movies()
     guess = next((m for m in movies if m["title"].lower() == guess_title.lower()), None)
     
