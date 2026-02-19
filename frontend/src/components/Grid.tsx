@@ -1,7 +1,7 @@
 
 'use client';
 
-import { GuessResult } from '@/lib/types';
+import { GuessResult } from '../lib/types';
 import FlipCard from './FlipCard';
 
 interface GridProps {

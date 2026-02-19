@@ -2,10 +2,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchMovies, submitGuess } from '@/lib/api';
-import { Movie, GuessResult } from '@/lib/types';
-import SearchBar from '@/components/SearchBar';
-import Grid from '@/components/Grid';
+import { fetchMovies, submitGuess } from '../lib/api';
+import { Movie, GuessResult } from '../lib/types';
+import SearchBar from '../components/SearchBar';
+import Grid from '../components/Grid';
 import confetti from 'canvas-confetti';
 
 export default function Home() {
