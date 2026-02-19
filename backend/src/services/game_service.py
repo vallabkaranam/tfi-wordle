@@ -437,9 +437,8 @@ def search_movies_tmdb(query: str, lang: str = 'te') -> List[Dict[str, Any]]:
         "Content-Type": "application/json;charset=utf-8"
     }
 
-    all_filtered = []
-    # Fetch up to 10 pages to maximize search coverage (200 items filtered by lang)
-    for page in range(1, 11):
+    # Scan up to 20 pages (400+ entries) to ensure even niche titles are found
+    for page in range(1, 21):
         params = {
             "query": query,
             "language": "en-US",
@@ -459,7 +458,8 @@ def search_movies_tmdb(query: str, lang: str = 'te') -> List[Dict[str, Any]]:
                             "title": m["title"],
                             "year": int(m["release_date"][:4]) if m.get("release_date") else 0
                         })
-                if len(all_filtered) >= 15:
+                # Keep scavenging until we have a healthy list of matches
+                if len(all_filtered) >= 40:
                     break
             else:
                 break
