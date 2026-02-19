@@ -18,6 +18,7 @@
     *   **Music Director**
     *   **Producer**
 -   **📊 Stats Tracking**: Built-in persistence for your win streaks, guess distributions, and total games played (saved locally).
+-   **📈 Visual Progress**: A dynamic bar chart in the Stats modal visualizes your "Guess Distribution," helping you track how quickly you're solving the puzzles.
 -   **🎨 Premium UI**: A sleek, dark-mode "Netflix-style" interface with glassmorphism, smooth animations (Framer Motion), and celebratory confetti.
 
 ## 🚀 Tech Stack
