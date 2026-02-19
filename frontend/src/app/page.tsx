@@ -11,7 +11,7 @@ import HintPoster from '../components/HintPoster';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
 import confetti from 'canvas-confetti';
-import { Trophy, HelpCircle, Calendar, Shuffle } from 'lucide-react';
+import { Trophy, HelpCircle, Calendar, Shuffle, Loader2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Countdown hook — ticks every second to midnight
@@ -68,6 +68,7 @@ export default function Home() {
   const [guesses, setGuesses] = useState<GuessResult[]>([]);
   const [gameStatus, setGameStatus] = useState<'in_progress' | 'won' | 'lost'>('in_progress');
   const [target, setTarget] = useState<Movie | null>(null);
+  const [isGuessing, setIsGuessing] = useState(false);
 
   // UI panels
   const [showStats, setShowStats] = useState(false);
@@ -107,6 +108,7 @@ export default function Home() {
   // ---------------------------------------------------------------------------
 
   const handleGuess = useCallback(async (id: number) => {
+    setIsGuessing(true);
     try {
       const response = await submitGuess(id, guesses, seed, language);
       if (!response.valid) return;
@@ -125,6 +127,8 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Guess error:', err);
+    } finally {
+      setIsGuessing(false);
     }
   }, [guesses, seed, language]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -229,12 +233,22 @@ export default function Home() {
         </div>
 
         {/* Search */}
-        <SearchBar
-          movies={movies}
-          onGuess={handleGuess}
-          disabled={gameStatus !== 'in_progress'}
-          lang={language}
-        />
+        <div className="relative">
+          <SearchBar
+            movies={movies}
+            onGuess={handleGuess}
+            disabled={gameStatus !== 'in_progress' || isGuessing}
+            lang={language}
+          />
+          {isGuessing && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-cinema/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
+              <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full border border-gold/30 shadow-lg animate-pulse">
+                <Loader2 className="h-4 w-4 text-gold animate-spin" />
+                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking...</span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Hint poster — appears after 2 wrong guesses */}
         {gameStatus === 'in_progress' && (

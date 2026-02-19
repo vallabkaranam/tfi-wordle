@@ -27,15 +27,15 @@ export default function HintPoster({ posterPath, wrongGuesses }: HintPosterProps
   // Only appear after 2 wrong guesses
   if (wrongGuesses < 2 || !posterPath) return null;
 
-  // Map wrong guess count to blur level
+  // Map wrong guess count to blur level — significantly reduced for better helpfulness
   const blurMap: Record<number, number> = {
-    2: 20,
-    3: 14,
-    4: 8,
-    5: 2,
+    2: 8,
+    3: 5,
+    4: 2,
+    5: 0,
   };
   const blurPx = blurMap[Math.min(wrongGuesses, 5)] ?? 2;
-  const brightness = 0.4 + (wrongGuesses - 2) * 0.12; // gets lighter each guess
+  const brightness = 0.5 + (wrongGuesses - 2) * 0.15; // increased for better visibility
 
   return (
     <motion.div
