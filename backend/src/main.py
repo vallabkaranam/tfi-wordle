@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,14 +9,23 @@ from .routers import game
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize data
+    """
+    Handles application lifecycle events.
+    Startup: Triggers a background data fetch from TMDB.
+    """
+    # Startup: Initialize data cache asynchronously to avoid blocking server start
     initialize_movie_data(background=True)
     yield
-    # Shutdown: Clean up if needed (nothing for now)
+    # Shutdown logic would go here
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="TFI Wordle API",
+    description="Backend service for the Telugu Movie Wordle game.",
+    lifespan=lifespan
+)
 
-# Allow CORS for local development
+# CORS configuration for frontend accessibility
+# In production, CORS_ORIGINS should be set to the deployed frontend URL.
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 
 app.add_middleware(
@@ -26,12 +36,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register high-level routers
 app.include_router(game.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "Tollywood Wordle API"}
+    """Health check endpoint."""
+    return {"message": "TFI Wordle API - Active"}
 
 if __name__ == "__main__":
     import uvicorn
+    # Entry point for local execution
     uvicorn.run(app, host="0.0.0.0", port=8000)
