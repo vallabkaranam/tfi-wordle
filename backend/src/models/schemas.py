@@ -13,15 +13,13 @@ class Movie(BaseModel):
     music: str
     producer: str
 
-class GuessRequest(BaseModel):
-    title: str
-
 class GuessValues(BaseModel):
     hero: str
     heroine: str
     director: str
     music: str
     producer: str
+    year: int
 
 class GuessMatches(BaseModel):
     hero: bool
@@ -29,13 +27,22 @@ class GuessMatches(BaseModel):
     director: bool
     music: bool
     producer: bool
+    year: bool
 
 class GuessResult(BaseModel):
+    id: Optional[int] = None
     title: str
     poster_path: Optional[str] = None
     values: GuessValues
     matches: GuessMatches
 
+class GuessRequest(BaseModel):
+    movie_id: int
+    previous_attempts: List[GuessResult]
+
 class GuessResponse(BaseModel):
-    guess: GuessResult
-    correct: bool
+    valid: bool
+    attempts: List[GuessResult]
+    remaining_attempts: int
+    status: str # "in_progress", "won", "lost"
+    answer: Optional[Movie] = None

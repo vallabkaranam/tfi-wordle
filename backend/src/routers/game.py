@@ -1,17 +1,15 @@
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import List
 
-from ..services.game_service import fetch_top_telugu_movies, get_daily_movie, check_guess
-from ..models.schemas import Movie, GuessRequest, GuessResponse, GuessResult
+from ..services.game_service import fetch_top_telugu_movies, get_daily_movie, process_guess
+from ..models.schemas import Movie, GuessRequest, GuessResponse
 
 router = APIRouter(prefix="/api")
 
 @router.get("/movies", response_model=List[Movie])
 def get_movies():
     """Returns list of movies for search bar"""
-    movies = fetch_top_telugu_movies()
-    # Return full data as per MD-11 spec (all fields required)
-    return movies
+    return fetch_top_telugu_movies()
 
 @router.get("/daily")
 def get_daily_target_debug():
@@ -21,13 +19,16 @@ def get_daily_target_debug():
 
 @router.post("/guess", response_model=GuessResponse)
 def make_guess(request: GuessRequest):
-    target = get_daily_movie()
-    result = check_guess(request.title, target)
-    if not result:
-        raise HTTPException(status_code=404, detail="Movie not found")
+    """
+    Process a guess:
+    1. Validate movie exists
+    2. Compare with daily target
+    3. Return updated attempt history and game state
+    """
+    response = process_guess(request.movie_id, request.previous_attempts)
     
-    # Check if win
-    is_win = request.title.lower() == target["title"].lower()
-    
-    # Validation against Pydantic models happens automatically
-    return {"guess": result, "correct": is_win}
+    if not response:
+        # Should not happen given logic, but safety check
+        raise HTTPException(status_code=400, detail="Invalid game state")
+
+    return response

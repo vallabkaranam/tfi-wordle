@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface SearchBarProps {
   movies: Partial<Movie>[];
-  onGuess: (title: string) => void;
+  onGuess: (id: number, title: string) => void;
   disabled?: boolean;
 }
 
@@ -28,10 +28,12 @@ export default function SearchBar({ movies, onGuess, disabled }: SearchBarProps)
     return fuse.search(query).map(r => r.item).slice(0, 5);
   }, [query, fuse]);
 
-  const handleSelect = (title: string) => {
-    onGuess(title);
-    setQuery('');
-    setIsOpen(false);
+  const handleSelect = (movie: Partial<Movie>) => {
+    if (movie.id && movie.title) {
+        onGuess(movie.id, movie.title);
+        setQuery('');
+        setIsOpen(false);
+    }
   };
 
   return (
@@ -68,9 +70,10 @@ export default function SearchBar({ movies, onGuess, disabled }: SearchBarProps)
                 <li key={movie.id}>
                   <button
                     className="w-full text-left px-4 py-3 text-white hover:bg-white/10 transition-colors flex items-center justify-between"
-                    onClick={() => handleSelect(movie.title!)}
+                    onClick={() => handleSelect(movie)}
                   >
                     <span>{movie.title}</span>
+                    <span className="text-xs text-gray-400">{movie.year}</span>
                   </button>
                 </li>
               ))}
