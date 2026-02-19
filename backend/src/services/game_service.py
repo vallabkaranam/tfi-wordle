@@ -172,16 +172,16 @@ def process_guess(guess_id: int, previous_attempts: List[GuessResult]) -> GuessR
             heroine=guess_movie["heroine"],
             director=guess_movie["director"],
             music=guess_movie["music"],
-            producer=guess_movie["producer"],
-            year=guess_movie["year"]
+            music=guess_movie["music"],
+            producer=guess_movie["producer"]
         ),
         matches=GuessMatches(
             hero=(guess_movie["hero"] == target["hero"]),
             heroine=(guess_movie["heroine"] == target["heroine"]),
             director=(guess_movie["director"] == target["director"]),
             music=(guess_movie["music"] == target["music"]),
-            producer=(guess_movie["producer"] == target["producer"]),
-            year=(guess_movie["year"] == target["year"])
+            music=(guess_movie["music"] == target["music"]),
+            producer=(guess_movie["producer"] == target["producer"])
         )
     )
 

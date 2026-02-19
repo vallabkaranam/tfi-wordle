@@ -11,13 +11,12 @@ interface GridProps {
 export default function Grid({ guesses }: GridProps) {
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4 pb-20">
-      <div className="grid grid-cols-6 gap-2 text-center text-xs uppercase text-gray-500 mb-2 px-4">
+      <div className="grid grid-cols-5 gap-2 text-center text-xs uppercase text-gray-500 mb-2 px-4">
         <div>Hero</div>
         <div>Heroine</div>
         <div>Director</div>
         <div>Music</div>
         <div>Producer</div>
-        <div>Year</div>
       </div>
       
       {guesses.map((guess, i) => (
@@ -25,7 +24,7 @@ export default function Grid({ guesses }: GridProps) {
           <div className="text-white font-bold text-lg mb-2 text-center text-gold flex items-center justify-center gap-2">
             {guess.title}
           </div>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             <FlipCard 
               content={guess.values.hero} 
               label="Hero" 
@@ -55,12 +54,6 @@ export default function Grid({ guesses }: GridProps) {
               label="Producer" 
               status={guess.matches.producer ? 'correct' : 'absent'} 
               delay={0.4}
-            />
-            <FlipCard 
-              content={guess.values.year?.toString() || ''} 
-              label="Year" 
-              status={guess.matches.year ? 'correct' : 'absent'} 
-              delay={0.5}
             />
           </div>
         </div>

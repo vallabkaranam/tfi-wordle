@@ -17,7 +17,6 @@ export interface GuessValues {
   director: string;
   music: string;
   producer: string;
-  year: number;
 }
 
 export interface GuessMatches {
@@ -26,7 +25,6 @@ export interface GuessMatches {
   director: boolean;
   music: boolean;
   producer: boolean;
-  year: boolean;
 }
 
 export interface GuessResult {

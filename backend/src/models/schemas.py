@@ -19,7 +19,6 @@ class GuessValues(BaseModel):
     director: str
     music: str
     producer: str
-    year: int
 
 class GuessMatches(BaseModel):
     hero: bool
@@ -27,7 +26,6 @@ class GuessMatches(BaseModel):
     director: bool
     music: bool
     producer: bool
-    year: bool
 
 class GuessResult(BaseModel):
     id: Optional[int] = None
