@@ -10,8 +10,8 @@ router = APIRouter(prefix="/api")
 def get_movies():
     """Returns list of movies for search bar"""
     movies = fetch_top_telugu_movies()
-    # Return minimal data for search and ensure type safety
-    return [{"id": m["id"], "title": m["title"]} for m in movies]
+    # Return full data as per MD-11 spec (all fields required)
+    return movies
 
 @router.get("/daily")
 def get_daily_target_debug():
