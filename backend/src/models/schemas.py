@@ -51,6 +51,7 @@ class GuessResult(BaseModel):
 class GuessRequest(BaseModel):
     movie_id: int
     previous_attempts: List[GuessResult]
+    seed: Optional[int] = None
 
 class GuessResponse(BaseModel):
     valid: bool

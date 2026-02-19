@@ -13,6 +13,8 @@ export default function Home() {
   const [guesses, setGuesses] = useState<GuessResult[]>([]);
   const [gameStatus, setGameStatus] = useState<'in_progress' | 'won' | 'lost'>('in_progress');
   const [target, setTarget] = useState<Movie | null>(null);
+  // Seed support for Unlimited Mode
+  const [seed, setSeed] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     fetchMovies().then(setMovies).catch(console.error);
@@ -21,7 +23,7 @@ export default function Home() {
 
   const handleGuess = async (id: number, title: string) => {
     try {
-      const response = await submitGuess(id, guesses);
+      const response = await submitGuess(id, guesses, seed);
       
       if (response.valid) {
           setGuesses(response.attempts);
@@ -38,6 +40,30 @@ export default function Home() {
       console.error(e);
       alert("Failed to submit guess");
     }
+  };
+
+  const startNewGame = () => {
+      // Generate random seed
+      const newSeed = Math.floor(Math.random() * 1000000);
+      setSeed(newSeed);
+      setGuesses([]);
+      setGameStatus('in_progress');
+      setTarget(null);
+  };
+  
+  const reloadPage = () => {
+      // Reloads for daily mode reset (or back to daily if we were in random mode)
+      // Actually strictly reloading might clear seed, which is fine = Back to Daily.
+      // But button says "Play Again", usually implies same mode or new game.
+      // If we are in "Daily" mode and won/lost, we can't really play again until tomorrow unless we go unlimited.
+      // So "Play Again" -> Start Unlimited Game seems best user experience?
+      if (seed === undefined && (gameStatus === 'won' || gameStatus === 'lost')) {
+          // Verify if they want random game? Assume yes for now.
+          startNewGame();
+      } else {
+          // If already in random mode, just start new random game
+          startNewGame();
+      }
   };
 
   const triggerWinConfetti = () => {
@@ -67,11 +93,12 @@ export default function Home() {
         <h1 className="text-3xl font-bold tracking-tighter text-gold">
           TFI <span className="text-white">WORDLE</span>
         </h1>
-        <div className="flex gap-4 text-sm text-gray-400">
-          <span>🍿 GUESS THE MOVIE ({guesses.length}/5)</span>
+        <div className="flex gap-4 text-sm text-gray-400 items-center">
+            {seed !== undefined && <span className="text-xs bg-gold/20 text-gold px-2 py-1 rounded">UNLIMITED MODE</span>}
+            <span>🍿 GUESS THE MOVIE ({guesses.length}/5)</span>
         </div>
       </header>
-
+      
       {/* Game Area */}
       <div className="w-full max-w-6xl relative">
         <SearchBar 
@@ -126,12 +153,20 @@ export default function Home() {
                  </div>
             )}
 
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-6 py-3 bg-gold text-black font-bold rounded-full hover:bg-yellow-400 transition-colors w-full"
-            >
-              Play Again
-            </button>
+            <div className="flex gap-2">
+                <button 
+                onClick={reloadPage}
+                className="flex-1 px-6 py-3 bg-gold text-black font-bold rounded-full hover:bg-yellow-400 transition-colors"
+                >
+                Play New Game
+                </button>
+                <button 
+                onClick={() => window.location.reload()}
+                className="px-6 py-3 bg-white/10 text-white font-medium rounded-full hover:bg-white/20 transition-colors"
+                >
+                Back to Daily
+                </button>
+            </div>
           </div>
         </div>
       )}

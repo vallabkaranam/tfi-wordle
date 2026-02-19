@@ -228,19 +228,25 @@ def fetch_top_telugu_movies() -> List[Dict[str, Any]]:
     with _CACHE_LOCK:
         return list(_MOVIES_CACHE)
 
-def get_daily_movie() -> Dict[str, Any]:
+def get_daily_movie(seed: Optional[int] = None) -> Dict[str, Any]:
     movies = fetch_top_telugu_movies()
     if not movies:
         return {"id": 0, "title": "Error"} 
         
-    today = date.today()
-    seed_str = f"{today.year}-{today.month}-{today.day}-v1"
-    random.seed(seed_str)
+    if seed is not None:
+        # Unlimited Mode: Deterministic for this user session seed
+        random.seed(seed)
+    else:
+        # Daily Mode: Deterministic per day
+        today = date.today()
+        seed_str = f"{today.year}-{today.month}-{today.day}-v1"
+        random.seed(seed_str)
+        
     sorted_movies = sorted(movies, key=lambda x: x["id"])
     return random.choice(sorted_movies)
 
-def process_guess(guess_id: int, previous_attempts: List[GuessResult]) -> GuessResponse:
-    target = get_daily_movie()
+def process_guess(guess_id: int, previous_attempts: List[GuessResult], seed: Optional[int] = None) -> GuessResponse:
+    target = get_daily_movie(seed)
     movies = fetch_top_telugu_movies()
     
     guess_movie = next((m for m in movies if m["id"] == guess_id), None)

@@ -9,13 +9,14 @@ export async function fetchMovies(): Promise<Movie[]> {
   return res.json();
 }
 
-export async function submitGuess(movieId: number, previousAttempts: GuessResult[]): Promise<GuessResponse> {
+export async function submitGuess(movieId: number, previousAttempts: GuessResult[], seed?: number): Promise<GuessResponse> {
   const res = await fetch(`${API_BASE}/guess`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       movie_id: movieId, 
-      previous_attempts: previousAttempts 
+      previous_attempts: previousAttempts,
+      seed: seed 
     }),
   });
   if (!res.ok) throw new Error('Failed to submit guess');

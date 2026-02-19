@@ -25,7 +25,7 @@ def make_guess(request: GuessRequest):
     2. Compare with daily target
     3. Return updated attempt history and game state
     """
-    response = process_guess(request.movie_id, request.previous_attempts)
+    response = process_guess(request.movie_id, request.previous_attempts, request.seed)
     
     if not response:
         # Should not happen given logic, but safety check
