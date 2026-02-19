@@ -220,3 +220,4 @@ yarn-error.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+movies_cache.json
