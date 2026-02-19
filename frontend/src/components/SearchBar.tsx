@@ -63,35 +63,36 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
   }, []);
 
   /**
-   * Search Logic:
-   * - < 2 chars: Use curated suggestions.
-   * - >= 2 chars: Trigger debounced API search for global Telugu movies.
+   * Search logic:
+   * - Empty: show cached suggestions (Fuse on initialMovies).
+   * - 1 char + cache warm: local Fuse only (fast).
+   * - 2+ chars, or cache still empty: debounced backend search (TMDB directly).
    */
   useEffect(() => {
      if (!query) {
-         // Show a few curated suggestions when the bar is empty but focused
-         setResults(initialMovies.slice(0, 5));
+         // Empty query: show cached suggestions if available
+         setResults(initialMovies.slice(0, 6));
          setActiveIndex(-1);
          return;
      }
 
-     if (query.length < 2) {
-         const localResults = fuse.search(query).map(r => r.item).slice(0, 5);
+     // Short query: try local Fuse first, but if cache is empty go remote immediately
+     if (query.length < 2 && initialMovies.length > 0) {
+         const localResults = fuse.search(query).map(r => r.item).slice(0, 6);
          setResults(localResults);
          setActiveIndex(-1);
          return;
      }
 
-     // Debounce to prevent multiple API hits on every keystroke
+     // >= 2 chars (or cache is empty): always go to TMDB directly
      const timer = setTimeout(async () => {
          setLoading(true);
          try {
-             // Fetch global results from the backend proxy
              const remoteResults = await searchMovies(query, lang);
-             setResults(remoteResults.slice(0, 10)); // Limit dropdown size
-             setActiveIndex(-1); // Reset keyboard selection
+             setResults(remoteResults.slice(0, 10));
+             setActiveIndex(-1);
          } catch (e) {
-             console.error("Async Search Error:", e);
+             console.error('Search error:', e);
          } finally {
              setLoading(false);
          }

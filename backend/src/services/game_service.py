@@ -378,7 +378,46 @@ def fetch_movies_for_lang(lang: str = 'te') -> List[Dict[str, Any]]:
     """Returns the cached movie list for the given language code."""
     with _CACHE_LOCK:
         return list(_MOVIES_CACHE.get(lang, []))
-        
+
+
+def _pick_live_movie(lang: str) -> Optional[Dict[str, Any]]:
+    """
+    Cold-cache fallback: picks and enriches the most popular movie for `lang`
+    directly from TMDB without relying on the in-memory cache.
+    Used when background cache threads haven't finished yet.
+    """
+    if not TMDB_READ_TOKEN:
+        return None
+    headers = {
+        "Authorization": f"Bearer {TMDB_READ_TOKEN}",
+        "Content-Type": "application/json;charset=utf-8",
+    }
+    try:
+        res = requests.get(
+            "https://api.themoviedb.org/3/discover/movie",
+            headers=headers,
+            params={
+                "with_original_language": lang,
+                "sort_by": "popularity.desc",
+                "vote_count.gte": 50,
+                "page": 1,
+            },
+        )
+        if res.status_code != 200:
+            return None
+        results = res.json().get("results", [])
+        today = date.today()
+        seed_str = f"{today.year}-{today.month}-{today.day}-{lang}-live"
+        random.seed(seed_str)
+        candidates = [r for r in results if r.get("original_language") == lang]
+        if not candidates:
+            return None
+        pick = random.choice(candidates[:10])
+        return _enrich_from_tmdb_live(pick["id"])
+    except Exception as e:
+        print(f"[ERROR] _pick_live_movie({lang}): {e}")
+        return None
+
 def search_movies_tmdb(query: str, lang: str = 'te') -> List[Dict[str, Any]]:
     """
     Proxies a search query to TMDB and filters by the specified language.
@@ -442,20 +481,22 @@ def get_daily_movie(seed: Optional[int] = None, lang: str = 'te') -> Dict[str, A
 
     Daily mode: seeded by date + language code so each language gets its own unique daily.
     Unlimited mode: custom integer seed replaces the date.
-
-    Args:
-        seed: Optional random seed for Unlimited Mode.
-        lang: Language pool to pick from.
+    Falls back to a live TMDB fetch when the cache is still warming (hi/ta at cold start).
     """
     movies = fetch_movies_for_lang(lang)
+
     if not movies:
-        return {"id": 0, "title": "Error - No Data"}
+        # Cache is still warming — do a live fetch so the user isn't blocked
+        live = _pick_live_movie(lang)
+        if live:
+            return live
+        return {"id": 0, "title": "Unavailable", "hero": "", "heroine": "",
+                "director": "", "music": "", "producer": "", "poster_path": None}
 
     if seed is not None:
         random.seed(seed)
     else:
         today = date.today()
-        # Include lang in the seed so Telugu/Hindi/Tamil dailies never collide
         seed_str = f"{today.year}-{today.month}-{today.day}-{lang}-v1"
         random.seed(seed_str)
 
@@ -475,8 +516,16 @@ def process_guess(guess_id: int, previous_attempts: List[GuessResult], seed: Opt
     """
     # 1. Determine the target for the session/day in the correct language pool
     target = get_daily_movie(seed, lang)
+    if not target.get("hero"):  # guard: target wasn't enriched (should never happen now)
+        return GuessResponse(
+            valid=False,
+            attempts=previous_attempts,
+            remaining_attempts=MAX_ATTEMPTS - len(previous_attempts),
+            status="in_progress",
+            answer=None
+        )
     cached_movies = fetch_movies_for_lang(lang)
-    
+
     # 2. Resolve the guessed movie
     # Try Cache first for speed
     guess_movie = next((m for m in cached_movies if m["id"] == guess_id), None)
