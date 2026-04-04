@@ -1,11 +1,13 @@
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from typing import List
+import logging
 
 from ..services.game_service import fetch_movies_for_lang, get_daily_movie, process_guess, search_movies_tmdb
-from ..models.schemas import Movie, GuessRequest, GuessResponse
+from ..models.schemas import Movie, GuessRequest, GuessResponse, TelemetryEvent
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
 # Allowed language codes — validated at the router boundary so service functions
 # receive only clean, trusted values.
@@ -72,3 +74,19 @@ def make_guess(request: GuessRequest):
         raise HTTPException(status_code=400, detail="Movie not found or invalid ID")
 
     return response
+
+
+@router.post("/telemetry")
+def ingest_telemetry(payload: TelemetryEvent, request: Request):
+    logger.info(
+        "telemetry event=%s lang=%s seed=%s status=%s query_length=%s attempts=%s metadata=%s client=%s",
+        payload.event,
+        payload.lang,
+        payload.seed,
+        payload.status,
+        payload.query_length,
+        payload.attempts,
+        payload.metadata or {},
+        request.client.host if request.client else "unknown",
+    )
+    return {"ok": True}

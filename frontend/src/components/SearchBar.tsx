@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Movie } from '../lib/types';
 import { searchMovies } from '../lib/api';
+import { trackError, trackEvent } from '../lib/telemetry';
 import { Language } from './LanguageToggle';
 
 /** Maps language codes to human-readable industry names for UI display */
@@ -28,6 +29,24 @@ interface SearchBarProps {
   lang?: Language;
 }
 
+function mergeResults(localResults: Partial<Movie>[], remoteResults: Partial<Movie>[]) {
+  const merged: Partial<Movie>[] = [];
+  const seen = new Set<number>();
+
+  for (const movie of [...localResults, ...remoteResults]) {
+    if (!movie.id || seen.has(movie.id)) {
+      continue;
+    }
+    seen.add(movie.id);
+    merged.push(movie);
+    if (merged.length >= 10) {
+      break;
+    }
+  }
+
+  return merged;
+}
+
 /**
  * Intelligent Search Bar with Debounced TMDB Integration.
  * Features:
@@ -44,6 +63,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
 
   // Initialize Fuse.js for high-speed local string matching
   const fuse = useMemo(() => new Fuse(initialMovies, {
@@ -69,36 +89,60 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
    * - 2+ chars, or cache still empty: debounced backend search (TMDB directly).
    */
   useEffect(() => {
-     if (!query) {
-         // Empty query: show cached suggestions if available
-         setResults(initialMovies.slice(0, 6));
-         setActiveIndex(-1);
-         return;
-     }
+    const trimmedQuery = query.trim();
+    const localResults = trimmedQuery
+      ? fuse.search(trimmedQuery).map((result) => result.item).slice(0, 6)
+      : initialMovies.slice(0, 6);
+    const currentRequestId = ++requestIdRef.current;
+    const controller = new AbortController();
 
-     // Short query: try local Fuse first, but if cache is empty go remote immediately
-     if (query.length < 2 && initialMovies.length > 0) {
-         const localResults = fuse.search(query).map(r => r.item).slice(0, 6);
-         setResults(localResults);
-         setActiveIndex(-1);
-         return;
-     }
+    setResults(localResults);
+    setActiveIndex(-1);
 
-     // >= 2 chars (or cache is empty): always go to TMDB directly
-     const timer = setTimeout(async () => {
-         setLoading(true);
-         try {
-             const remoteResults = await searchMovies(query, lang);
-             setResults(remoteResults.slice(0, 10));
-             setActiveIndex(-1);
-         } catch (e) {
-             console.error('Search error:', e);
-         } finally {
-             setLoading(false);
-         }
-     }, 300);
+    if (!trimmedQuery) {
+      setLoading(false);
+      return () => {
+        controller.abort();
+      };
+    }
 
-     return () => clearTimeout(timer);
+    if (trimmedQuery.length < 2) {
+      setLoading(false);
+      return () => {
+        controller.abort();
+      };
+    }
+
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const remoteResults = await searchMovies(trimmedQuery, lang, controller.signal);
+        if (requestIdRef.current !== currentRequestId) {
+          return;
+        }
+        trackEvent({
+          event: 'search_completed',
+          lang,
+          query_length: trimmedQuery.length,
+          metadata: { result_count: remoteResults.length },
+        });
+        setResults(mergeResults(localResults, remoteResults));
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Search error:', error);
+          trackError('search_failed', error, { lang, query_length: trimmedQuery.length });
+        }
+      } finally {
+        if (requestIdRef.current === currentRequestId) {
+          setLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query, fuse, initialMovies, lang]);
 
   const handleSelect = (movie: Partial<Movie>) => {

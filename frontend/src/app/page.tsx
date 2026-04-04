@@ -1,17 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import Image from 'next/image';
 import { fetchMovies, submitGuess } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
-import { loadStats, recordGame, GameStats } from '../lib/stats';
+import { loadStats, recordDailyGame, GameStats } from '../lib/stats';
+import { buildShareText, clearStoredGame, loadStoredGame, saveStoredGame } from '../lib/gameState';
+import { trackError, trackEvent } from '../lib/telemetry';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
 import StatsModal from '../components/StatsModal';
 import HintPoster from '../components/HintPoster';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
-import confetti from 'canvas-confetti';
-import { Trophy, HelpCircle, Calendar, Shuffle, Loader2 } from 'lucide-react';
+import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Share2, Check, Sparkles, Flame, Clapperboard } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Countdown hook — ticks every second to midnight
@@ -38,6 +40,24 @@ const LANG_THEME: Record<Language, { accent: string; accentBg: string; industry:
   te: { accent: 'text-gold',       accentBg: 'bg-yellow-500/10', industry: 'Tollywood', label: 'TFI' },
   hi: { accent: 'text-orange-400', accentBg: 'bg-orange-500/10', industry: 'Bollywood', label: 'BFI' },
   ta: { accent: 'text-red-400',    accentBg: 'bg-red-500/10',    industry: 'Kollywood', label: 'KFI' },
+};
+
+const HERO_COPY: Record<Language, { title: string; blurb: string; chips: string[] }> = {
+  te: {
+    title: 'Decode the Telugu movie from the people behind it.',
+    blurb: 'Every guess reveals hero, heroine, director, music, and producer clues. It is movie nerdery with Wordle tension.',
+    chips: ['Daily puzzle', 'Shareable score', 'Tollywood deep cuts'],
+  },
+  hi: {
+    title: 'Crack the Hindi movie using cast-and-crew clues.',
+    blurb: 'Search any Hindi title, compare the key roles, and hunt down the answer in five shots or less.',
+    chips: ['Daily puzzle', 'Bollywood mode', 'Built for bragging rights'],
+  },
+  ta: {
+    title: 'Read the room, then guess the Tamil movie.',
+    blurb: 'A fast movie puzzle where the real clue trail is hero, heroine, director, music, and producer.',
+    chips: ['Daily puzzle', 'Kollywood mode', 'Perfect to share'],
+  },
 };
 
 /**
@@ -74,6 +94,9 @@ export default function Home() {
   const [showStats, setShowStats] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [stats, setStats] = useState<GameStats>(() => loadStats());
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [hasLoadedStoredGame, setHasLoadedStoredGame] = useState(false);
+  const hasTrackedInitialView = useRef(false);
 
   const countdown = useCountdown();
 
@@ -99,9 +122,62 @@ export default function Home() {
 
   // Re-fetch suggestions & reset board on language change
   useEffect(() => {
-    fetchMovies(language).then(setMovies).catch(console.error);
+    fetchMovies(language)
+      .then((loadedMovies) => {
+        setMovies(loadedMovies);
+        trackEvent({ event: 'movie_pool_loaded', lang: language, metadata: { count: loadedMovies.length } });
+      })
+      .catch((error) => {
+        console.error(error);
+        trackError('movie_pool_failed', error, { lang: language });
+      });
     resetGame(); // Switch language → back to daily for that language
   }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (hasTrackedInitialView.current) {
+      return;
+    }
+    hasTrackedInitialView.current = true;
+    trackEvent({ event: 'page_view', lang: language, seed });
+  }, [language, seed]);
+
+  useEffect(() => {
+    trackEvent({ event: 'language_changed', lang: language, seed });
+  }, [language, seed]);
+
+  useEffect(() => {
+    setHasLoadedStoredGame(false);
+    const storedGame = loadStoredGame(language, seed);
+    if (!storedGame) {
+      setGuesses([]);
+      setGameStatus('in_progress');
+      setTarget(null);
+      setHasLoadedStoredGame(true);
+      return;
+    }
+
+    setGuesses(storedGame.guesses);
+    setGameStatus(storedGame.status);
+    setTarget(storedGame.target);
+    setHasLoadedStoredGame(true);
+  }, [language, seed]);
+
+  useEffect(() => {
+    if (!hasLoadedStoredGame) {
+      return;
+    }
+    saveStoredGame(language, { guesses, status: gameStatus, target }, seed);
+  }, [language, guesses, gameStatus, target, seed, hasLoadedStoredGame]);
+
+  useEffect(() => {
+    if (!copiedShare) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setCopiedShare(false), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [copiedShare]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -115,28 +191,87 @@ export default function Home() {
 
       setGuesses(response.attempts);
       setGameStatus(response.status as typeof gameStatus);
+      trackEvent({
+        event: 'guess_submitted',
+        lang: language,
+        seed,
+        status: response.status,
+        attempts: response.attempts.length,
+        metadata: { movie_id: id },
+      });
 
       if (response.status === 'won') {
         if (response.answer) setTarget(response.answer);
         // Only record stats for daily mode — random games shouldn't affect streak
-        if (!isRandom) setStats(recordGame(true, response.attempts.length));
+        if (!isRandom) {
+          setStats(recordDailyGame(language, true, response.attempts.length));
+        }
         triggerConfetti();
       } else if (response.status === 'lost') {
         if (response.answer) setTarget(response.answer);
-        if (!isRandom) setStats(recordGame(false, response.attempts.length));
+        if (!isRandom) {
+          setStats(recordDailyGame(language, false, response.attempts.length));
+        }
       }
     } catch (err) {
       console.error('Guess error:', err);
+      trackError('guess_failed', err, { lang: language, seed, previous_attempts: guesses.length });
     } finally {
       setIsGuessing(false);
     }
   }, [guesses, seed, language]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const switchToRandom = () => resetGame(Math.floor(Math.random() * 1_000_000));
-  const switchToDaily  = () => resetGame(undefined);
-  const playAgain      = () => resetGame(Math.floor(Math.random() * 1_000_000));
+  const switchToRandom = () => {
+    trackEvent({ event: 'mode_changed', lang: language, metadata: { mode: 'random' } });
+    resetGame(Math.floor(Math.random() * 1_000_000));
+  };
+  const switchToDaily  = () => {
+    trackEvent({ event: 'mode_changed', lang: language, metadata: { mode: 'daily' } });
+    resetGame(undefined);
+  };
+  const playAgain      = () => {
+    if (seed !== undefined) {
+      clearStoredGame(language, seed);
+    }
+    trackEvent({ event: 'play_again', lang: language, seed });
+    resetGame(Math.floor(Math.random() * 1_000_000));
+  };
 
-  function triggerConfetti() {
+  const handleShare = useCallback(async () => {
+    const shareText = buildShareText(
+      gameStatus,
+      guesses,
+      theme.label,
+      isRandom,
+      typeof window !== 'undefined' ? window.location.origin : undefined
+    );
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${theme.label} Wordle`,
+          text: shareText,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+      }
+      trackEvent({
+        event: 'result_shared',
+        lang: language,
+        seed,
+        status: gameStatus,
+        attempts: guesses.length,
+        metadata: { is_random: isRandom },
+      });
+      setCopiedShare(true);
+    } catch (error) {
+      console.error('Share failed:', error);
+      trackError('share_failed', error, { lang: language, seed, status: gameStatus });
+    }
+  }, [gameStatus, guesses, theme.label, isRandom, language, seed]);
+
+  async function triggerConfetti() {
+    const confetti = (await import('canvas-confetti')).default;
     const end = Date.now() + 3000;
     const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
     const rng = (lo: number, hi: number) => Math.random() * (hi - lo) + lo;
@@ -154,6 +289,18 @@ export default function Home() {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+  const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
+  const shareText = canShare
+    ? buildShareText(
+        gameStatus,
+        guesses,
+        theme.label,
+        isRandom,
+        typeof window !== 'undefined' ? window.location.origin : undefined
+      )
+    : '';
+  const hero = HERO_COPY[language];
+
   return (
     <main className="flex min-h-screen flex-col items-center bg-cinema text-white font-sans">
 
@@ -218,6 +365,46 @@ export default function Home() {
         </div>
       </header>
       <div className="w-full max-w-5xl flex-1 px-4 pt-5 pb-24">
+        <section className="mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(255,215,0,0.18),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-5 sm:p-7 shadow-2xl">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-gray-300">
+                <Sparkles className="h-3.5 w-3.5 text-gold" />
+                Movie puzzle for actual Indian cinema fans
+              </p>
+              <h2 className="max-w-xl text-3xl font-black leading-tight text-white sm:text-4xl">
+                {hero.title}
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-gray-300 sm:text-base">
+                {hero.blurb}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {hero.chips.map((chip) => (
+                  <span key={chip} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-gray-200">
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-left text-xs sm:min-w-[260px]">
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <Clapperboard className={`mb-2 h-4 w-4 ${theme.accent}`} />
+                <div className="font-bold text-white">Search any title</div>
+                <div className="mt-1 text-gray-400">Pull from TMDB and local movie pools.</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <Flame className="mb-2 h-4 w-4 text-orange-400" />
+                <div className="font-bold text-white">Five-role deduction</div>
+                <div className="mt-1 text-gray-400">Hero, heroine, director, music, producer.</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <Share2 className="mb-2 h-4 w-4 text-sky-300" />
+                <div className="font-bold text-white">Share the flex</div>
+                <div className="mt-1 text-gray-400">Post your score after every daily win.</div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Context strip */}
         <div className="text-center mb-5">
@@ -294,9 +481,12 @@ export default function Home() {
             {target && (
               <div className="flex gap-4 bg-black/40 border border-white/5 rounded-xl p-4 mb-5">
                 {target.poster_path ? (
-                  <img
+                  <Image
                     src={`https://image.tmdb.org/t/p/w185${target.poster_path}`}
                     alt={target.title}
+                    width={56}
+                    height={80}
+                    sizes="56px"
                     className="w-14 h-20 rounded-lg object-cover shrink-0 shadow-lg"
                   />
                 ) : (
@@ -338,6 +528,21 @@ export default function Home() {
                 </button>
               )}
             </div>
+            {canShare && (
+              <>
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-gray-500">Share Preview</div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-200">{shareText}</pre>
+                </div>
+                <button
+                  onClick={handleShare}
+                  className="mt-3 w-full py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                >
+                  {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Share2 className="h-4 w-4" />}
+                  {copiedShare ? 'Shared' : 'Share Result'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

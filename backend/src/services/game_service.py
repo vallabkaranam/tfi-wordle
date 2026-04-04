@@ -14,12 +14,15 @@ It manages:
 import os
 import requests
 import json
+import logging
 from datetime import date
 import random
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Optional, Any
 from ..models.schemas import Movie, GuessResult, GuessValues, GuessImages, GuessMatches, GuessResponse
+
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
 # CONFIGURATION & GLOBAL STATE
@@ -40,6 +43,31 @@ _CACHE_LOCK = threading.RLock()
 # Game rules
 MAX_ATTEMPTS = 5
 SUPPORTED_LANGS = {'te': 'Telugu', 'hi': 'Hindi', 'ta': 'Tamil'}
+_INIT_LOCK = threading.RLock()
+_INIT_STARTED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
+_INIT_COMPLETED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
+_TMDB_TIMEOUT = (3.05, 8)
+_SEARCH_MAX_PAGES = 4
+_SEARCH_TARGET_RESULTS = 20
+_DISCOVER_MAX_PAGES = 25
+
+
+def _tmdb_get(path: str, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None) -> Optional[requests.Response]:
+    """Small wrapper so every TMDB call gets a timeout and consistent error handling."""
+    try:
+        response = requests.get(
+            f"https://api.themoviedb.org/3/{path}",
+            headers=headers,
+            params=params,
+            timeout=_TMDB_TIMEOUT,
+        )
+        if response.status_code != 200:
+            logger.warning("tmdb request failed path=%s status=%s params=%s", path, response.status_code, params)
+            return None
+        return response
+    except requests.RequestException as exc:
+        logger.warning("tmdb request exception path=%s params=%s error=%s", path, params, exc)
+        return None
 
 # -------------------------------------------------------------------
 # METADATA & DATA LOADING
@@ -96,36 +124,33 @@ def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
     if not TMDB_READ_TOKEN: return None
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}", "Content-Type": "application/json;charset=utf-8"}
 
-    try:
-        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?append_to_response=credits"
-        res = requests.get(url, headers=headers)
-        if res.status_code != 200: return None
-        
-        data = res.json()
-        credits = data.get("credits", {})
-        cast, crew = credits.get("cast", []), credits.get("crew", [])
-        
-        # Heuristics:
-        hero = next((c for c in cast if c.get("gender") == 2), cast[0] if cast else {"name": "Unknown"})
-        heroine = next((c for c in cast if c.get("gender") == 1), {"name": "Unknown"})
-        director = next((c for c in crew if c.get("job") == "Director"), {"name": "Unknown"})
-        music = next((c for c in crew if c.get("job") in ["Original Music Composer", "Music"]), {"name": "Unknown"})
-        producer = next((c for c in crew if c.get("job") == "Producer"), {"name": "Unknown"})
-
-        movie = {
-            "id": tmdb_id, "title": data["title"], "language": data.get("original_language", "te"),
-            "year": int(data.get("release_date", "0000")[:4]) if data.get("release_date") else 0,
-            "poster_path": data.get("poster_path"),
-            "hero": hero.get("name"), "heroine": heroine.get("name"), "director": director.get("name"),
-            "music": music.get("name"), "producer": producer.get("name"),
-            "hero_pfp": hero.get("profile_path"), "heroine_pfp": heroine.get("profile_path"),
-            "director_pfp": director.get("profile_path"), "music_pfp": music.get("profile_path"),
-            "producer_pfp": producer.get("profile_path")
-        }
-        _ENRICHMENT_CACHE[tmdb_id] = movie # Memoize
-        return movie
-    except:
+    response = _tmdb_get(f"movie/{tmdb_id}?append_to_response=credits", headers)
+    if not response:
         return None
+
+    data = response.json()
+    credits = data.get("credits", {})
+    cast, crew = credits.get("cast", []), credits.get("crew", [])
+    
+    # Heuristics:
+    hero = next((c for c in cast if c.get("gender") == 2), cast[0] if cast else {"name": "Unknown"})
+    heroine = next((c for c in cast if c.get("gender") == 1), {"name": "Unknown"})
+    director = next((c for c in crew if c.get("job") == "Director"), {"name": "Unknown"})
+    music = next((c for c in crew if c.get("job") in ["Original Music Composer", "Music"]), {"name": "Unknown"})
+    producer = next((c for c in crew if c.get("job") == "Producer"), {"name": "Unknown"})
+
+    movie = {
+        "id": tmdb_id, "title": data["title"], "language": data.get("original_language", "te"),
+        "year": int(data.get("release_date", "0000")[:4]) if data.get("release_date") else 0,
+        "poster_path": data.get("poster_path"),
+        "hero": hero.get("name"), "heroine": heroine.get("name"), "director": director.get("name"),
+        "music": music.get("name"), "producer": producer.get("name"),
+        "hero_pfp": hero.get("profile_path"), "heroine_pfp": heroine.get("profile_path"),
+        "director_pfp": director.get("profile_path"), "music_pfp": music.get("profile_path"),
+        "producer_pfp": producer.get("profile_path")
+    }
+    _ENRICHMENT_CACHE[tmdb_id] = movie # Memoize
+    return movie
 
 # -------------------------------------------------------------------
 # CACHE SYNCHRONIZATION
@@ -142,85 +167,175 @@ def _perform_data_refresh(lang: str = 'te'):
     print(f"[INFO] Syncing {SUPPORTED_LANGS.get(lang)} pool...")
     movies, found_ids = [], set()
 
-    # Discover the top 500 movies across 25 pages
-    for page in range(1, 26):
-        try:
-            params = {"with_original_language": lang, "sort_by": "popularity.desc", "page": page, "vote_count.gte": 5 if is_curated_lang else 50}
-            res = requests.get("https://api.themoviedb.org/3/discover/movie", headers=headers, params=params)
-            if res.status_code != 200: continue
-            
-            items = res.json().get("results", [])
-            
-            def process_item(item):
-                tid = item["id"]
-                if tid in found_ids or (is_curated_lang and tid not in metadata_map): return None
-                try:
-                    if is_curated_lang:
-                        detail = requests.get(f"https://api.themoviedb.org/3/movie/{tid}?append_to_response=credits", headers=headers).json()
-                        images = _extract_person_images(detail.get("credits", {}), metadata_map[tid])
-                        return {"id": tid, "title": item["title"], "language": lang, "year": int(item.get("release_date", "0000")[:4]),
-                                "poster_path": item.get("poster_path"), **metadata_map[tid], **images}
-                    return _enrich_from_tmdb_live(tid)
-                except: return None
+    # Discover the top movies in popularity order.
+    for page in range(1, _DISCOVER_MAX_PAGES + 1):
+        params = {
+            "with_original_language": lang,
+            "sort_by": "popularity.desc",
+            "page": page,
+            "vote_count.gte": 5 if is_curated_lang else 50,
+        }
+        response = _tmdb_get("discover/movie", headers, params=params)
+        if not response:
+            continue
 
-            # Concurrency: Fetch 10 movie details at once
-            with ThreadPoolExecutor(max_workers=15) as executor:
-                for movie_data in executor.map(process_item, items):
-                    if movie_data:
-                        movies.append(movie_data)
-                        found_ids.add(movie_data["id"])
-        except: continue
+        payload = response.json()
+        items = payload.get("results", [])
+        if not items:
+            break
 
-    with _CACHE_LOCK: _MOVIES_CACHE[lang] = movies
+        def process_item(item):
+            tid = item["id"]
+            if tid in found_ids or (is_curated_lang and tid not in metadata_map):
+                return None
+
+            if is_curated_lang:
+                detail = _tmdb_get(f"movie/{tid}?append_to_response=credits", headers)
+                if not detail:
+                    return None
+                images = _extract_person_images(detail.json().get("credits", {}), metadata_map[tid])
+                return {
+                    "id": tid,
+                    "title": item["title"],
+                    "language": lang,
+                    "year": int(item.get("release_date", "0000")[:4]),
+                    "poster_path": item.get("poster_path"),
+                    **metadata_map[tid],
+                    **images,
+                }
+
+            return _enrich_from_tmdb_live(tid)
+
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            for movie_data in executor.map(process_item, items):
+                if movie_data:
+                    movies.append(movie_data)
+                    found_ids.add(movie_data["id"])
+
+        if is_curated_lang and len(found_ids) >= len(metadata_map):
+            break
+        if page >= payload.get("total_pages", page):
+            break
+
+    with _CACHE_LOCK:
+        _MOVIES_CACHE[lang] = movies
+    with _INIT_LOCK:
+        _INIT_COMPLETED[lang] = True
     print(f"[SUCCESS] {lang} ready: {len(movies)} movies.")
 
 def initialize_movie_data(background: bool = False):
-    _perform_data_refresh('te')
-    for l in ('hi', 'ta'):
-        threading.Thread(target=_perform_data_refresh, args=(l,), daemon=True).start()
+    for lang in SUPPORTED_LANGS:
+        _ensure_movie_data(lang, background=background)
+
+
+def _start_refresh_thread(lang: str):
+    def runner():
+        try:
+            _perform_data_refresh(lang)
+        finally:
+            with _INIT_LOCK:
+                if not _INIT_COMPLETED[lang]:
+                    _INIT_STARTED[lang] = False
+
+    thread = threading.Thread(target=runner, args=(), daemon=True)
+    thread.start()
+
+
+def _ensure_movie_data(lang: str = 'te', background: bool = True):
+    with _CACHE_LOCK:
+        if _MOVIES_CACHE.get(lang):
+            return
+
+    with _INIT_LOCK:
+        if _INIT_STARTED[lang] or _INIT_COMPLETED[lang]:
+            return
+        _INIT_STARTED[lang] = True
+
+    if background:
+        _start_refresh_thread(lang)
+        return
+
+    try:
+        _perform_data_refresh(lang)
+    except Exception:
+        with _INIT_LOCK:
+            _INIT_STARTED[lang] = False
+        raise
 
 # -------------------------------------------------------------------
 # PUBLIC INTERFACE & GAME LOGIC
 # -------------------------------------------------------------------
 
 def fetch_movies_for_lang(lang: str = 'te'):
+    _ensure_movie_data(lang, background=True)
     with _CACHE_LOCK: return list(_MOVIES_CACHE.get(lang, []))
 
 def _pick_live_movie(lang: str):
-    try:
-        headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
-        res = requests.get("https://api.themoviedb.org/3/discover/movie", headers=headers, 
-                           params={"with_original_language": lang, "sort_by": "popularity.desc", "vote_count.gte": 50}).json()
-        ids = [m["id"] for m in res.get("results", []) if m.get("original_language") == lang]
-        if ids:
-            random.seed(f"{date.today()}-{lang}-live")
-            return _enrich_from_tmdb_live(random.choice(ids[:10]))
-    except: return None
+    headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
+    response = _tmdb_get(
+        "discover/movie",
+        headers,
+        params={"with_original_language": lang, "sort_by": "popularity.desc", "vote_count.gte": 50},
+    )
+    if not response:
+        return None
+
+    ids = [m["id"] for m in response.json().get("results", []) if m.get("original_language") == lang]
+    if ids:
+        random.seed(f"{date.today()}-{lang}-live")
+        return _enrich_from_tmdb_live(random.choice(ids[:10]))
+    return None
 
 def search_movies_tmdb(query: str, lang: str = 'te'):
-    """Fast parallelized search scanner."""
-    if not TMDB_READ_TOKEN: return []
+    """Bounded TMDB search that avoids wasteful full-pagination scans."""
+    if not TMDB_READ_TOKEN:
+        return []
+
+    normalized_query = query.strip()
+    if len(normalized_query) < 2:
+        return []
+
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
-    all_f = []
+    unique_results: List[Dict[str, Any]] = []
+    seen = set()
 
-    def fetch_page(p):
-        try:
-            r = requests.get("https://api.themoviedb.org/3/search/movie", headers=headers, 
-                             params={"query": query, "page": p, "region": "IN"}).json()
-            return [{"id": m["id"], "title": m["title"], "year": int(m.get("release_date", "0000")[:4]), "lang": m.get("original_language")} 
-                    for m in r.get("results", [])]
-        except: return []
+    for page in range(1, _SEARCH_MAX_PAGES + 1):
+        response = _tmdb_get(
+            "search/movie",
+            headers,
+            params={"query": normalized_query, "page": page, "region": "IN", "include_adult": "false"},
+        )
+        if not response:
+            break
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        for results in executor.map(fetch_page, range(1, 21)):
-            for m in results:
-                if m["lang"] == lang: all_f.append(m)
-            if len(all_f) >= 40: break
-    
-    unique, seen = [], set()
-    for x in all_f:
-        if x["id"] not in seen: unique.append(x); seen.add(x["id"])
-    return unique[:20]
+        payload = response.json()
+        for movie in payload.get("results", []):
+            if movie.get("original_language") != lang:
+                continue
+            movie_id = movie["id"]
+            if movie_id in seen:
+                continue
+            seen.add(movie_id)
+            unique_results.append({
+                "id": movie_id,
+                "title": movie["title"],
+                "year": int(movie.get("release_date", "0000")[:4]) if movie.get("release_date") else None,
+                "lang": movie.get("original_language"),
+                "popularity": movie.get("popularity", 0),
+            })
+
+        if len(unique_results) >= _SEARCH_TARGET_RESULTS:
+            break
+        if page >= min(payload.get("total_pages", page), _SEARCH_MAX_PAGES):
+            break
+
+    unique_results.sort(key=lambda movie: (
+        not movie["title"].lower().startswith(normalized_query.lower()),
+        movie["title"].lower() != normalized_query.lower(),
+        -movie.get("popularity", 0),
+        movie["title"].lower(),
+    ))
+    return [{k: v for k, v in movie.items() if k != "popularity"} for movie in unique_results[:_SEARCH_TARGET_RESULTS]]
 
 def get_daily_movie(seed: Optional[int] = None, lang: str = 'te'):
     pool = fetch_movies_for_lang(lang)
@@ -245,3 +360,4 @@ def process_guess(guess_id: int, prev: List[GuessResult], seed: Optional[int] = 
     is_win = (movie["id"] == target["id"])
     status = "won" if is_win else ("lost" if len(history) >= MAX_ATTEMPTS else "in_progress")
     return GuessResponse(valid=True, status=status, attempts=history, remaining_attempts=MAX_ATTEMPTS - len(history), answer=Movie(**target) if status in ["won", "lost"] else None)
+logger = logging.getLogger(__name__)

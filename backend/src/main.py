@@ -3,9 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
+import logging
 
 from .services.game_service import initialize_movie_data
 from .routers import game
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

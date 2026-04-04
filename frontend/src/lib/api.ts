@@ -17,9 +17,14 @@ export async function fetchMovies(lang: string = 'te'): Promise<Partial<Movie>[]
 }
 
 /** Proxies a search query to TMDB, filtered by the selected language. */
-export async function searchMovies(query: string, lang: string = 'te'): Promise<Partial<Movie>[]> {
+export async function searchMovies(
+  query: string,
+  lang: string = 'te',
+  signal?: AbortSignal
+): Promise<Partial<Movie>[]> {
   const res = await fetch(
-    `${API_BASE}/search?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(lang)}`
+    `${API_BASE}/search?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(lang)}`,
+    { signal }
   );
   if (!res.ok) {
     console.warn('Search request failed');

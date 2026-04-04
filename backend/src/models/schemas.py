@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 class Movie(BaseModel):
     id: int
@@ -60,3 +60,13 @@ class GuessResponse(BaseModel):
     remaining_attempts: int
     status: str # "in_progress", "won", "lost"
     answer: Optional[Movie] = None
+
+
+class TelemetryEvent(BaseModel):
+    event: str
+    lang: Optional[str] = None
+    seed: Optional[int] = None
+    status: Optional[str] = None
+    query_length: Optional[int] = None
+    attempts: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None

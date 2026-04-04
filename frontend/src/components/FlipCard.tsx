@@ -2,6 +2,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { cn } from '../lib/utils';
 
 interface FlipCardProps {
@@ -61,10 +62,12 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
         >
            {/* Face Portrait: Mixed with the status color for a premium look */}
            {imageUrl ? (
-             <img 
-                src={`https://image.tmdb.org/t/p/w200${imageUrl}`} 
-                alt={content} 
-                className="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay" 
+             <Image
+                src={`https://image.tmdb.org/t/p/w200${imageUrl}`}
+                alt={content}
+                fill
+                sizes="(max-width: 640px) 20vw, 120px"
+                className="absolute inset-0 object-cover opacity-40 mix-blend-overlay"
              />
            ) : null}
            

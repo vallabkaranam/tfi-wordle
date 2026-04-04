@@ -7,6 +7,8 @@
  * Key: 'tfi-wordle-stats'
  */
 
+import { getLocalDateKey } from './date';
+
 export interface GameStats {
   gamesPlayed: number;
   wins: number;
@@ -16,6 +18,8 @@ export interface GameStats {
   guessDistribution: Record<number, number>;
   /** ISO date string of last game played */
   lastPlayedDate: string | null;
+  /** Completed daily puzzle keys to avoid double-counting */
+  completedDailyKeys: Record<string, true>;
 }
 
 const STATS_KEY = 'tfi-wordle-stats';
@@ -28,6 +32,7 @@ const DEFAULT_STATS: GameStats = {
   maxStreak: 0,
   guessDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   lastPlayedDate: null,
+  completedDailyKeys: {},
 };
 
 /** Load stats from localStorage, or return defaults if not found */
@@ -70,6 +75,35 @@ export function recordGame(won: boolean, guessCount: number): GameStats {
     stats.guessDistribution[key] = (stats.guessDistribution[key] ?? 0) + 1;
   } else {
     // Losing resets the streak
+    stats.currentStreak = 0;
+  }
+
+  saveStats(stats);
+  return stats;
+}
+
+export function recordDailyGame(lang: string, won: boolean, guessCount: number): GameStats {
+  const stats = loadStats();
+  const today = getLocalDateKey();
+  const dailyKey = `${lang}:${today}`;
+
+  if (stats.completedDailyKeys[dailyKey]) {
+    return stats;
+  }
+
+  stats.completedDailyKeys[dailyKey] = true;
+  stats.gamesPlayed += 1;
+  stats.lastPlayedDate = today;
+
+  if (won) {
+    stats.wins += 1;
+    stats.currentStreak += 1;
+    if (stats.currentStreak > stats.maxStreak) {
+      stats.maxStreak = stats.currentStreak;
+    }
+    const key = Math.min(Math.max(guessCount, 1), 5) as 1 | 2 | 3 | 4 | 5;
+    stats.guessDistribution[key] = (stats.guessDistribution[key] ?? 0) + 1;
+  } else {
     stats.currentStreak = 0;
   }
 

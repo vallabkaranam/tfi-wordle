@@ -1,0 +1,27 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="1080" y2="550" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#090909"/>
+      <stop offset="0.58" stop-color="#141414"/>
+      <stop offset="1" stop-color="#2A1904"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(230 120) rotate(34.5085) scale(396.14 280.496)">
+      <stop stop-color="#FFD54A" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#FFD54A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="630" rx="28" fill="url(#glow)"/>
+  <rect x="24" y="24" width="1152" height="582" rx="24" stroke="white" stroke-opacity="0.14"/>
+  <rect x="72" y="74" width="88" height="88" rx="24" fill="#FFD54A" fill-opacity="0.16" stroke="#FFD54A" stroke-opacity="0.38"/>
+  <text x="95" y="135" font-size="46">🍿</text>
+  <text x="186" y="112" fill="#D8D8D8" font-family="Arial, sans-serif" font-size="26" letter-spacing="10">DAILY MOVIE PUZZLE</text>
+  <text x="186" y="184" fill="white" font-family="Arial, sans-serif" font-size="82" font-weight="800">TFI WORDLE</text>
+  <text x="72" y="336" fill="#F3F3F3" font-family="Arial, sans-serif" font-size="38">
+    <tspan x="72" dy="0">Guess the movie in 5 tries using hero, heroine,</tspan>
+    <tspan x="72" dy="52">director, music, and producer clues.</tspan>
+  </text>
+  <text x="72" y="500" fill="#FFD54A" font-family="Arial, sans-serif" font-size="28" font-weight="700">Tollywood</text>
+  <text x="262" y="500" fill="#FFD54A" font-family="Arial, sans-serif" font-size="28" font-weight="700">Bollywood</text>
+  <text x="455" y="500" fill="#FFD54A" font-family="Arial, sans-serif" font-size="28" font-weight="700">Kollywood</text>
+</svg>

@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 
 interface HintPosterProps {
   /** TMDB poster_path (e.g. '/abc123.jpg') */
@@ -48,10 +49,12 @@ export default function HintPoster({ posterPath, wrongGuesses }: HintPosterProps
         🎯 Hint Unlocked — {blurPx > 10 ? 'Barely there...' : blurPx > 5 ? 'Getting warmer...' : 'Almost!'}
       </span>
       <div className="relative w-20 h-28 overflow-hidden rounded-lg border border-gold/20 shadow-xl shadow-gold/5">
-        <img
+        <Image
           src={`https://image.tmdb.org/t/p/w300${posterPath}`}
           alt="Hint"
-          className="w-full h-full object-cover transition-all duration-700"
+          fill
+          sizes="80px"
+          className="object-cover transition-all duration-700"
           style={{
             filter: `blur(${blurPx}px) brightness(${brightness})`,
           }}
