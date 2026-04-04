@@ -20,7 +20,7 @@ interface StatsModalProps {
  *  - Max Streak
  *
  * Also renders a horizontal bar chart of guess distribution (how often
- * the player won in 1-5 guesses) to encourage improvement.
+ * the player won in 1-6 guesses) to encourage improvement.
  */
 export default function StatsModal({ isOpen, onClose, stats }: StatsModalProps) {
   const wr = winRate(stats);
@@ -82,7 +82,7 @@ export default function StatsModal({ isOpen, onClose, stats }: StatsModalProps) 
                 Guess Distribution
               </h3>
               <div className="space-y-2">
-                {[1, 2, 3, 4, 5].map((n) => {
+                {[1, 2, 3, 4, 5, 6].map((n) => {
                   const count = stats.guessDistribution[n] ?? 0;
                   const pct = Math.max((count / maxDist) * 100, count > 0 ? 8 : 4);
                   return (

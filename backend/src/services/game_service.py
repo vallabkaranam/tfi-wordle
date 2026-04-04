@@ -15,10 +15,13 @@ import os
 import requests
 import json
 import logging
+import re
+import unicodedata
 from datetime import date
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
 from typing import List, Dict, Optional, Any
 from ..models.schemas import Movie, GuessResult, GuessValues, GuessImages, GuessMatches, GuessResponse
 
@@ -41,7 +44,7 @@ _ENRICHMENT_CACHE: Dict[int, Dict[str, Any]] = {} # Global cache for non-pool mo
 _CACHE_LOCK = threading.RLock()
 
 # Game rules
-MAX_ATTEMPTS = 5
+MAX_ATTEMPTS = 6
 SUPPORTED_LANGS = {'te': 'Telugu', 'hi': 'Hindi', 'ta': 'Tamil'}
 _INIT_LOCK = threading.RLock()
 _INIT_STARTED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
@@ -49,7 +52,109 @@ _INIT_COMPLETED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
 _TMDB_TIMEOUT = (3.05, 8)
 _SEARCH_MAX_PAGES = 4
 _SEARCH_TARGET_RESULTS = 20
-_DISCOVER_MAX_PAGES = 25
+_DISCOVER_PAGE_LIMIT = 25
+_DISCOVER_TARGET_POOL_SIZE = 350
+_DISCOVER_VOTE_FLOORS = (100, 50, 25, 10, 5)
+_DISCOVER_MIN_WORKERS = 4
+_DISCOVER_MAX_WORKERS = 12
+_LIVE_PICK_CANDIDATE_LIMIT = 12
+
+
+def _normalize_search_text(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value or "")
+    value = "".join(char for char in value if not unicodedata.combining(char))
+    value = value.lower().replace("&", " and ")
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _loose_search_text(value: str) -> str:
+    normalized = _normalize_search_text(value)
+    normalized = re.sub(r"([aeiou])\1+", r"\1", normalized)
+    normalized = normalized.replace("aa", "a").replace("ee", "e").replace("ii", "i").replace("oo", "o").replace("uu", "u")
+    normalized = normalized.replace("bh", "b").replace("dh", "d").replace("gh", "g").replace("kh", "k").replace("ph", "f").replace("sh", "s").replace("th", "t")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _search_forms(value: str) -> List[str]:
+    forms = []
+    for candidate in (
+        value.strip(),
+        _normalize_search_text(value),
+        _loose_search_text(value),
+    ):
+        if candidate and candidate not in forms:
+            forms.append(candidate)
+    return forms
+
+
+def _compact_search_text(value: str) -> str:
+    return _normalize_search_text(value).replace(" ", "")
+
+
+def _score_title_match(query: str, title: str) -> float:
+    normalized_query = _normalize_search_text(query)
+    normalized_title = _normalize_search_text(title)
+    loose_query = _loose_search_text(query)
+    loose_title = _loose_search_text(title)
+    compact_query = normalized_query.replace(" ", "")
+    compact_title = normalized_title.replace(" ", "")
+
+    if not normalized_query or not normalized_title:
+        return 0.0
+
+    ratios = [
+        SequenceMatcher(None, normalized_query, normalized_title).ratio(),
+        SequenceMatcher(None, loose_query, loose_title).ratio(),
+        SequenceMatcher(None, compact_query, compact_title).ratio() if compact_query and compact_title else 0.0,
+    ]
+    score = max(ratios)
+
+    if normalized_title.startswith(normalized_query) or loose_title.startswith(loose_query):
+        score += 0.35
+    if normalized_query in normalized_title or loose_query in loose_title:
+        score += 0.2
+
+    query_tokens = set(normalized_query.split())
+    title_tokens = set(normalized_title.split())
+    if query_tokens and title_tokens:
+        overlap = len(query_tokens & title_tokens) / len(query_tokens)
+        score += overlap * 0.25
+
+    return score
+
+
+def _search_cached_movies(query: str, lang: str, limit: int = _SEARCH_TARGET_RESULTS) -> List[Dict[str, Any]]:
+    pool = fetch_movies_for_lang(lang)
+    if not pool:
+        return []
+
+    scored_movies = []
+    for movie in pool:
+        score = _score_title_match(query, movie.get("title", ""))
+        if score < 0.72:
+            continue
+        scored_movies.append((score, movie))
+
+    scored_movies.sort(key=lambda item: (-item[0], item[1].get("year") or 0, item[1].get("title", "").lower()))
+    return [
+        {
+            "id": movie["id"],
+            "title": movie["title"],
+            "year": movie.get("year"),
+            "lang": movie.get("language", lang),
+        }
+        for _, movie in scored_movies[:limit]
+    ]
+
+
+def _pool_target_size(metadata_map: Dict[int, Dict[str, Any]]) -> int:
+    """Keep each language pool roughly the same size while preserving curated coverage."""
+    return max(_DISCOVER_TARGET_POOL_SIZE, len(metadata_map))
+
+
+def _refresh_worker_count(batch_size: int) -> int:
+    return max(_DISCOVER_MIN_WORKERS, min(_DISCOVER_MAX_WORKERS, batch_size))
 
 
 def _tmdb_get(path: str, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None) -> Optional[requests.Response]:
@@ -163,59 +268,68 @@ def _perform_data_refresh(lang: str = 'te'):
 
     is_curated_lang = (lang == 'te')
     metadata_map = _load_local_metadata() if is_curated_lang else {}
+    target_pool_size = _pool_target_size(metadata_map)
 
     print(f"[INFO] Syncing {SUPPORTED_LANGS.get(lang)} pool...")
     movies, found_ids = [], set()
 
-    # Discover the top movies in popularity order.
-    for page in range(1, _DISCOVER_MAX_PAGES + 1):
-        params = {
-            "with_original_language": lang,
-            "sort_by": "popularity.desc",
-            "page": page,
-            "vote_count.gte": 5 if is_curated_lang else 50,
-        }
-        response = _tmdb_get("discover/movie", headers, params=params)
-        if not response:
-            continue
+    def process_item(item):
+        tid = item["id"]
+        if tid in found_ids:
+            return None
 
-        payload = response.json()
-        items = payload.get("results", [])
-        if not items:
-            break
-
-        def process_item(item):
-            tid = item["id"]
-            if tid in found_ids or (is_curated_lang and tid not in metadata_map):
+        if is_curated_lang and tid in metadata_map:
+            detail = _tmdb_get(f"movie/{tid}?append_to_response=credits", headers)
+            if not detail:
                 return None
+            images = _extract_person_images(detail.json().get("credits", {}), metadata_map[tid])
+            return {
+                "id": tid,
+                "title": item["title"],
+                "language": lang,
+                "year": int(item.get("release_date", "0000")[:4]),
+                "poster_path": item.get("poster_path"),
+                **metadata_map[tid],
+                **images,
+            }
 
-            if is_curated_lang:
-                detail = _tmdb_get(f"movie/{tid}?append_to_response=credits", headers)
-                if not detail:
-                    return None
-                images = _extract_person_images(detail.json().get("credits", {}), metadata_map[tid])
-                return {
-                    "id": tid,
-                    "title": item["title"],
-                    "language": lang,
-                    "year": int(item.get("release_date", "0000")[:4]),
-                    "poster_path": item.get("poster_path"),
-                    **metadata_map[tid],
-                    **images,
-                }
+        return _enrich_from_tmdb_live(tid)
 
-            return _enrich_from_tmdb_live(tid)
-
-        with ThreadPoolExecutor(max_workers=12) as executor:
-            for movie_data in executor.map(process_item, items):
-                if movie_data:
-                    movies.append(movie_data)
-                    found_ids.add(movie_data["id"])
-
-        if is_curated_lang and len(found_ids) >= len(metadata_map):
+    # Use the same widening vote thresholds for every language so the pool sizes
+    # settle in the same range instead of depending on one-off language branches.
+    for min_votes in _DISCOVER_VOTE_FLOORS:
+        if len(found_ids) >= target_pool_size:
             break
-        if page >= payload.get("total_pages", page):
-            break
+
+        for page in range(1, _DISCOVER_PAGE_LIMIT + 1):
+            if len(found_ids) >= target_pool_size:
+                break
+
+            params = {
+                "with_original_language": lang,
+                "sort_by": "popularity.desc",
+                "page": page,
+                "vote_count.gte": min_votes,
+            }
+            response = _tmdb_get("discover/movie", headers, params=params)
+            if not response:
+                continue
+
+            payload = response.json()
+            items = payload.get("results", [])
+            if not items:
+                break
+
+            with ThreadPoolExecutor(max_workers=_refresh_worker_count(len(items))) as executor:
+                for movie_data in executor.map(process_item, items):
+                    if movie_data and movie_data["id"] not in found_ids:
+                        movies.append(movie_data)
+                        found_ids.add(movie_data["id"])
+                        if len(found_ids) >= target_pool_size:
+                            break
+
+            if page >= payload.get("total_pages", page):
+                break
 
     with _CACHE_LOCK:
         _MOVIES_CACHE[lang] = movies
@@ -272,67 +386,72 @@ def fetch_movies_for_lang(lang: str = 'te'):
 
 def _pick_live_movie(lang: str):
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
-    response = _tmdb_get(
-        "discover/movie",
-        headers,
-        params={"with_original_language": lang, "sort_by": "popularity.desc", "vote_count.gte": 50},
-    )
-    if not response:
-        return None
 
-    ids = [m["id"] for m in response.json().get("results", []) if m.get("original_language") == lang]
-    if ids:
-        random.seed(f"{date.today()}-{lang}-live")
-        return _enrich_from_tmdb_live(random.choice(ids[:10]))
+    for min_votes in _DISCOVER_VOTE_FLOORS:
+        response = _tmdb_get(
+            "discover/movie",
+            headers,
+            params={"with_original_language": lang, "sort_by": "popularity.desc", "vote_count.gte": min_votes},
+        )
+        if not response:
+            continue
+
+        ids = [m["id"] for m in response.json().get("results", []) if m.get("original_language") == lang]
+        if ids:
+            random.seed(f"{date.today()}-{lang}-live")
+            return _enrich_from_tmdb_live(random.choice(ids[:_LIVE_PICK_CANDIDATE_LIMIT]))
     return None
 
 def search_movies_tmdb(query: str, lang: str = 'te'):
-    """Bounded TMDB search that avoids wasteful full-pagination scans."""
+    """Hybrid search: fast local fuzzy matching first, TMDB fallback for broader coverage."""
     if not TMDB_READ_TOKEN:
-        return []
+        return _search_cached_movies(query, lang)
 
     normalized_query = query.strip()
     if len(normalized_query) < 2:
         return []
 
+    local_results = _search_cached_movies(normalized_query, lang)
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
-    unique_results: List[Dict[str, Any]] = []
-    seen = set()
+    unique_results: List[Dict[str, Any]] = list(local_results)
+    seen = {movie["id"] for movie in local_results if movie.get("id")}
 
-    for page in range(1, _SEARCH_MAX_PAGES + 1):
-        response = _tmdb_get(
-            "search/movie",
-            headers,
-            params={"query": normalized_query, "page": page, "region": "IN", "include_adult": "false"},
-        )
-        if not response:
-            break
+    for search_query in _search_forms(normalized_query):
+        for page in range(1, _SEARCH_MAX_PAGES + 1):
+            response = _tmdb_get(
+                "search/movie",
+                headers,
+                params={"query": search_query, "page": page, "region": "IN", "include_adult": "false"},
+            )
+            if not response:
+                break
 
-        payload = response.json()
-        for movie in payload.get("results", []):
-            if movie.get("original_language") != lang:
-                continue
-            movie_id = movie["id"]
-            if movie_id in seen:
-                continue
-            seen.add(movie_id)
-            unique_results.append({
-                "id": movie_id,
-                "title": movie["title"],
-                "year": int(movie.get("release_date", "0000")[:4]) if movie.get("release_date") else None,
-                "lang": movie.get("original_language"),
-                "popularity": movie.get("popularity", 0),
-            })
+            payload = response.json()
+            for movie in payload.get("results", []):
+                if movie.get("original_language") != lang:
+                    continue
+                movie_id = movie["id"]
+                if movie_id in seen:
+                    continue
+                seen.add(movie_id)
+                unique_results.append({
+                    "id": movie_id,
+                    "title": movie["title"],
+                    "year": int(movie.get("release_date", "0000")[:4]) if movie.get("release_date") else None,
+                    "lang": movie.get("original_language"),
+                    "popularity": movie.get("popularity", 0),
+                })
 
+            if len(unique_results) >= _SEARCH_TARGET_RESULTS:
+                break
+            if page >= min(payload.get("total_pages", page), _SEARCH_MAX_PAGES):
+                break
         if len(unique_results) >= _SEARCH_TARGET_RESULTS:
-            break
-        if page >= min(payload.get("total_pages", page), _SEARCH_MAX_PAGES):
             break
 
     unique_results.sort(key=lambda movie: (
-        not movie["title"].lower().startswith(normalized_query.lower()),
-        movie["title"].lower() != normalized_query.lower(),
-        -movie.get("popularity", 0),
+        -_score_title_match(normalized_query, movie["title"]),
+        -(movie.get("popularity", 0) if movie.get("popularity") is not None else -1),
         movie["title"].lower(),
     ))
     return [{k: v for k, v in movie.items() if k != "popularity"} for movie in unique_results[:_SEARCH_TARGET_RESULTS]]
@@ -345,19 +464,28 @@ def get_daily_movie(seed: Optional[int] = None, lang: str = 'te'):
 
 def process_guess(guess_id: int, prev: List[GuessResult], seed: Optional[int] = None, lang: str = 'te'):
     target = get_daily_movie(seed, lang)
-    if not target.get("hero"): return GuessResponse(valid=False, status="in_progress", remaining_attempts=5-len(prev), attempts=prev)
+    if not target.get("hero"): return GuessResponse(valid=False, status="in_progress", remaining_attempts=MAX_ATTEMPTS-len(prev), attempts=prev)
     movie = next((m for m in fetch_movies_for_lang(lang) if m["id"] == guess_id), _enrich_from_tmdb_live(guess_id))
-    if not movie: return GuessResponse(valid=False, status="in_progress", remaining_attempts=5-len(prev), attempts=prev)
+    if not movie: return GuessResponse(valid=False, status="in_progress", remaining_attempts=MAX_ATTEMPTS-len(prev), attempts=prev)
 
     roles = ["hero", "heroine", "director", "music", "producer"]
+    target_year = target.get("year")
+    guess_year = movie.get("year")
+    if target_year is None or guess_year is None:
+        year_match = "unknown"
+    elif guess_year == target_year:
+        year_match = "correct"
+    elif guess_year < target_year:
+        year_match = "higher"
+    else:
+        year_match = "lower"
     res = GuessResult(
         id=movie["id"], title=movie["title"], poster_path=movie.get("poster_path"),
-        values=GuessValues(**{r: movie[r] for r in roles}),
+        values=GuessValues(**{**{r: movie[r] for r in roles}, "year": guess_year}),
         images=GuessImages(**{r: movie.get(f"{r}_pfp") for r in roles}),
-        matches=GuessMatches(**{r: (movie[r] == target[r]) for r in roles})
+        matches=GuessMatches(**{**{r: (movie[r] == target[r]) for r in roles}, "year": year_match})
     )
     history = prev + [res]
     is_win = (movie["id"] == target["id"])
     status = "won" if is_win else ("lost" if len(history) >= MAX_ATTEMPTS else "in_progress")
     return GuessResponse(valid=True, status=status, attempts=history, remaining_attempts=MAX_ATTEMPTS - len(history), answer=Movie(**target) if status in ["won", "lost"] else None)
-logger = logging.getLogger(__name__)

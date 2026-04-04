@@ -8,7 +8,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tfi-wordle.vercel.a
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: 'TFI Wordle | The Movie Guessing Game for Indian Cinema',
-  description: 'Guess the movie in 5 tries using hero, heroine, director, music, and producer clues across Tollywood, Bollywood, and Kollywood.',
+  description: 'Guess the movie in 6 tries using hero, heroine, director, music, producer, and year clues across Tollywood, Bollywood, and Kollywood.',
   keywords: ['movie wordle', 'tollywood game', 'bollywood game', 'kollywood game', 'indian cinema game', 'daily movie puzzle'],
   alternates: {
     canonical: '/',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'TFI Wordle',
-    description: 'Guess the movie in 5 tries and share your score.',
+    description: 'Guess the movie in 6 tries and share your score.',
     images: ['/social-preview.svg'],
   },
   icons: {

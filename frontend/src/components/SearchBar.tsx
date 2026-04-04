@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Movie } from '../lib/types';
 import { searchMovies } from '../lib/api';
+import { buildMovieSearchAliases, loosenMovieTitle, normalizeMovieTitle } from '../lib/search';
 import { trackError, trackEvent } from '../lib/telemetry';
 import { Language } from './LanguageToggle';
 
@@ -66,10 +67,25 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
   const requestIdRef = useRef(0);
 
   // Initialize Fuse.js for high-speed local string matching
-  const fuse = useMemo(() => new Fuse(initialMovies, {
-    keys: ['title'],
-    threshold: 0.3, // Balance between exact and fuzzy matches
-  }), [initialMovies]);
+  const searchIndex = useMemo(
+    () =>
+      initialMovies.map((movie) => ({
+        ...movie,
+        searchAliases: movie.title ? buildMovieSearchAliases(movie.title) : [],
+        normalizedTitle: movie.title ? normalizeMovieTitle(movie.title) : '',
+      })),
+    [initialMovies]
+  );
+
+  const fuse = useMemo(() => new Fuse(searchIndex, {
+    keys: [
+      { name: 'title', weight: 0.7 },
+      { name: 'searchAliases', weight: 0.3 },
+    ],
+    threshold: 0.42,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  }), [searchIndex]);
 
   // Listener to close the dropdown when clicking outside the component
   useEffect(() => {
@@ -90,8 +106,9 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
    */
   useEffect(() => {
     const trimmedQuery = query.trim();
+    const fuzzyQuery = loosenMovieTitle(trimmedQuery);
     const localResults = trimmedQuery
-      ? fuse.search(trimmedQuery).map((result) => result.item).slice(0, 6)
+      ? fuse.search(fuzzyQuery).map((result) => result.item as Partial<Movie>).slice(0, 8)
       : initialMovies.slice(0, 6);
     const currentRequestId = ++requestIdRef.current;
     const controller = new AbortController();

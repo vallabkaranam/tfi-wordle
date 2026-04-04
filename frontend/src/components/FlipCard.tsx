@@ -10,12 +10,14 @@ interface FlipCardProps {
   content: string;
   /** Role label for accessibility and context */
   label?: string;
-  /** Wordle-style status: 'correct' (green), 'present' (yellow), 'absent' (gray) */
-  status?: 'correct' | 'present' | 'absent' | 'empty';
+  /** Wordle-style status plus directional year hints */
+  status?: 'correct' | 'present' | 'absent' | 'empty' | 'higher' | 'lower';
   /** Animation stagger delay */
   delay?: number;
   /** Optional profile image path from TMDB */
   imageUrl?: string;
+  /** Optional sub-indicator like ↑ / ↓ for year hints */
+  indicator?: string;
 }
 
 /**
@@ -24,7 +26,7 @@ interface FlipCardProps {
  * - Displays different colors based on the validation status.
  * - Shows a portrait of the person (if available) as a subtle background.
  */
-export default function FlipCard({ content, label, status = 'empty', delay = 0, imageUrl }: FlipCardProps) {
+export default function FlipCard({ content, label, status = 'empty', delay = 0, imageUrl, indicator }: FlipCardProps) {
   const isRevealed = status !== 'empty';
 
   return (
@@ -55,7 +57,7 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
           className={cn(
             "absolute inset-0 backface-hidden rounded-lg flex flex-col items-center justify-center p-2 text-center border-2 overflow-hidden shadow-inner",
             status === 'correct' ? "bg-wordle-green border-wordle-green shadow-green-900/50" :
-            status === 'present' ? "bg-wordle-yellow border-wordle-yellow shadow-yellow-900/50" :
+            status === 'present' || status === 'higher' || status === 'lower' ? "bg-wordle-yellow border-wordle-yellow shadow-yellow-900/50" :
             "bg-wordle-gray border-wordle-gray shadow-gray-900/50",
           )}
           style={{ transform: "rotateY(180deg)" }}
@@ -76,6 +78,9 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
                 <span className="text-xs sm:text-sm font-bold text-white leading-tight line-clamp-2 drop-shadow-md">
                     {content}
                 </span>
+                {indicator ? (
+                  <span className="mt-1 text-lg font-black text-white drop-shadow-md">{indicator}</span>
+                ) : null}
            </div>
         </div>
       </motion.div>

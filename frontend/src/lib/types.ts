@@ -23,6 +23,7 @@ export interface GuessValues {
   director: string;
   music: string;
   producer: string;
+  year?: number;
 }
 
 export interface GuessImages {
@@ -39,6 +40,7 @@ export interface GuessMatches {
   director: boolean;
   music: boolean;
   producer: boolean;
+  year: 'correct' | 'higher' | 'lower' | 'unknown';
 }
 
 export interface GuessResult {

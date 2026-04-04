@@ -23,6 +23,7 @@ export interface GameStats {
 }
 
 const STATS_KEY = 'tfi-wordle-stats';
+const MAX_ATTEMPTS = 6;
 
 /** Default blank stats for a new player */
 const DEFAULT_STATS: GameStats = {
@@ -30,7 +31,7 @@ const DEFAULT_STATS: GameStats = {
   wins: 0,
   currentStreak: 0,
   maxStreak: 0,
-  guessDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  guessDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
   lastPlayedDate: null,
   completedDailyKeys: {},
 };
@@ -70,8 +71,7 @@ export function recordGame(won: boolean, guessCount: number): GameStats {
     if (stats.currentStreak > stats.maxStreak) {
       stats.maxStreak = stats.currentStreak;
     }
-    // Record guess distribution (clamp to 1–5)
-    const key = Math.min(Math.max(guessCount, 1), 5) as 1 | 2 | 3 | 4 | 5;
+    const key = Math.min(Math.max(guessCount, 1), MAX_ATTEMPTS) as 1 | 2 | 3 | 4 | 5 | 6;
     stats.guessDistribution[key] = (stats.guessDistribution[key] ?? 0) + 1;
   } else {
     // Losing resets the streak
@@ -101,7 +101,7 @@ export function recordDailyGame(lang: string, won: boolean, guessCount: number):
     if (stats.currentStreak > stats.maxStreak) {
       stats.maxStreak = stats.currentStreak;
     }
-    const key = Math.min(Math.max(guessCount, 1), 5) as 1 | 2 | 3 | 4 | 5;
+    const key = Math.min(Math.max(guessCount, 1), MAX_ATTEMPTS) as 1 | 2 | 3 | 4 | 5 | 6;
     stats.guessDistribution[key] = (stats.guessDistribution[key] ?? 0) + 1;
   } else {
     stats.currentStreak = 0;

@@ -60,7 +60,7 @@ def make_guess(request: GuessRequest):
     Logic Flow:
     1. Retrieve the daily/seeded target for the given language.
     2. Resolve the guessed movie from cache or via live TMDB fetch.
-    3. Compare all five fields (Hero, Heroine, Director, Music, Producer).
+    3. Compare all six fields (Hero, Heroine, Director, Music, Producer, Year).
     4. Return updated attempts + game status (in_progress / won / lost).
     """
     response = process_guess(

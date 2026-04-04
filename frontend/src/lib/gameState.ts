@@ -65,17 +65,26 @@ export function buildShareText(
   origin?: string
 ) {
   const outcome = status === 'won' ? guesses.length.toString() : 'X';
-  const header = `${languageLabel} Wordle ${isRandom ? 'Random' : getLocalDateKey()} ${outcome}/5`;
+  const header = `${languageLabel} Wordle ${isRandom ? 'Random' : getLocalDateKey()} ${outcome}/6`;
   const rows = guesses.map((guess) => {
-    const roles = [
+    const cells = [
       guess.matches.hero,
       guess.matches.heroine,
       guess.matches.director,
       guess.matches.music,
       guess.matches.producer,
+      guess.matches.year,
     ];
 
-    return roles.map((matched) => (matched ? '🟩' : '⬛')).join('');
+    return cells.map((matched) => {
+      if (matched === true || matched === 'correct') {
+        return '🟩';
+      }
+      if (matched === 'higher' || matched === 'lower') {
+        return '🟨';
+      }
+      return '⬛';
+    }).join('');
   });
 
   return [header, ...rows, `Play: ${origin || 'https://tfi-wordle.vercel.app'}`].join('\n');

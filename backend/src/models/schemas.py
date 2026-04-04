@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Literal
 
 class Movie(BaseModel):
     id: int
@@ -25,6 +25,7 @@ class GuessValues(BaseModel):
     director: str
     music: str
     producer: str
+    year: Optional[int] = None
     
 class GuessImages(BaseModel):
     hero: Optional[str] = None
@@ -39,6 +40,7 @@ class GuessMatches(BaseModel):
     director: bool
     music: bool
     producer: bool
+    year: Literal['correct', 'higher', 'lower', 'unknown']
 
 class GuessResult(BaseModel):
     id: Optional[int] = None

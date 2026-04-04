@@ -19,11 +19,13 @@ const LANG_INFO: Record<Language, {
   exampleDirector: string;
   exampleMusic: string;
   exampleProducer: string;
+  exampleYear: string;
   heroMatch: boolean;
   heroineMatch: boolean;
   directorMatch: boolean;
   musicMatch: boolean;
   producerMatch: boolean;
+  yearMatch: 'correct' | 'higher' | 'lower';
   summary: string;
 }> = {
   te: {
@@ -34,12 +36,14 @@ const LANG_INFO: Record<Language, {
     exampleDirector: 'Rajamouli',
     exampleMusic: 'M.M. Keeravani',
     exampleProducer: 'Shobu Yarlagadda',
+    exampleYear: '2015',
     heroMatch: true,
     heroineMatch: false,
     directorMatch: false,
     musicMatch: true,
     producerMatch: false,
-    summary: 'Hero & Music matched — 3 roles left!',
+    yearMatch: 'higher',
+    summary: 'Hero and Music matched, and the target is newer than 2015.',
   },
   hi: {
     industry: 'Hindi',
@@ -49,12 +53,14 @@ const LANG_INFO: Record<Language, {
     exampleDirector: 'Nitesh Tiwari',
     exampleMusic: 'Pritam',
     exampleProducer: 'Aamir Khan Productions',
+    exampleYear: '2016',
     heroMatch: true,
     heroineMatch: false,
     directorMatch: false,
     musicMatch: false,
     producerMatch: true,
-    summary: 'Hero & Producer matched — 3 roles left!',
+    yearMatch: 'lower',
+    summary: 'Hero and Producer matched, and the target is older than 2016.',
   },
   ta: {
     industry: 'Tamil',
@@ -64,12 +70,14 @@ const LANG_INFO: Record<Language, {
     exampleDirector: 'Lokesh Kanagaraj',
     exampleMusic: 'Anirudh',
     exampleProducer: 'Raaj Kamal Films',
+    exampleYear: '2022',
     heroMatch: false,
     heroineMatch: false,
     directorMatch: false,
     musicMatch: true,
     producerMatch: true,
-    summary: 'Music & Producer matched — 3 roles left!',
+    yearMatch: 'correct',
+    summary: 'Music, Producer, and Year matched — 3 columns left!',
   },
 };
 
@@ -113,20 +121,24 @@ export default function HowToPlay({ isOpen, onClose, language = 'te' }: HowToPla
             {/* Rules */}
             <div className="space-y-3 mb-6">
               <p className="text-gray-300 text-sm leading-relaxed">
-                Guess the <span className="text-gold font-bold">secret movie</span> in 5 tries or fewer!
+                Guess the <span className="text-gold font-bold">secret movie</span> in 6 tries or fewer!
               </p>
               <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300 pl-1">
                 <li>Search for any movie in the input.</li>
-                <li>Each guess reveals how five key roles compare to the target.</li>
+                <li>Each guess reveals how six key columns compare to the target.</li>
                 <li>
                   <span className="inline-block w-4 h-4 bg-wordle-green rounded-sm mr-1 align-middle" />
                   <strong className="text-white">Green</strong> = exact match for that role.
                 </li>
                 <li>
-                  <span className="inline-block w-4 h-4 bg-wordle-gray rounded-sm mr-1 align-middle" />
-                  <strong className="text-white">Gray</strong> = wrong person for that role.
+                  <span className="inline-block w-4 h-4 bg-wordle-yellow rounded-sm mr-1 align-middle" />
+                  <strong className="text-white">Yellow</strong> on Year = use the arrow. <strong className="text-white">↑</strong> means the target is newer, <strong className="text-white">↓</strong> means it is older.
                 </li>
-                <li>Match all five roles to win 🍿</li>
+                <li>
+                  <span className="inline-block w-4 h-4 bg-wordle-gray rounded-sm mr-1 align-middle" />
+                  <strong className="text-white">Gray</strong> = wrong person or missing year hint.
+                </li>
+                <li>Match all six columns to win 🍿</li>
               </ol>
               <p className="text-xs text-gray-500">A new puzzle drops every day at midnight.</p>
             </div>
@@ -139,15 +151,16 @@ export default function HowToPlay({ isOpen, onClose, language = 'te' }: HowToPla
               If you guessed <span className="text-gold font-semibold">{info.exampleMovie}</span>:
             </p>
 
-            <div className="grid grid-cols-5 gap-1 text-center text-[9px] uppercase text-gray-400 mb-1 font-bold tracking-wider">
-              <div>Hero</div><div>Heroine</div><div>Director</div><div>Music</div><div>Producer</div>
+            <div className="grid grid-cols-6 gap-1 text-center text-[9px] uppercase text-gray-400 mb-1 font-bold tracking-wider">
+              <div>Hero</div><div>Heroine</div><div>Director</div><div>Music</div><div>Producer</div><div>Year</div>
             </div>
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-6 gap-1">
               <ExampleCell match={info.heroMatch}     name={info.exampleHero}      />
               <ExampleCell match={info.heroineMatch}  name={info.exampleHeroine}   />
               <ExampleCell match={info.directorMatch} name={info.exampleDirector}  />
               <ExampleCell match={info.musicMatch}    name={info.exampleMusic}     />
               <ExampleCell match={info.producerMatch} name={info.exampleProducer}  />
+              <ExampleCell match={info.yearMatch === 'correct'} name={info.exampleYear} indicator={info.yearMatch === 'higher' ? '↑' : info.yearMatch === 'lower' ? '↓' : undefined} />
             </div>
             <p className="text-xs text-gray-500 mt-3 text-center">{info.summary}</p>
 
@@ -164,15 +177,15 @@ export default function HowToPlay({ isOpen, onClose, language = 'te' }: HowToPla
   );
 }
 
-function ExampleCell({ match, name }: { match: boolean; name: string }) {
+function ExampleCell({ match, name, indicator }: { match: boolean; name: string; indicator?: string }) {
   return (
     <div
       className={`rounded-lg p-2 text-center flex flex-col items-center justify-center min-h-[60px] ${
-        match ? 'bg-wordle-green' : 'bg-wordle-gray'
+        match ? 'bg-wordle-green' : indicator ? 'bg-wordle-yellow' : 'bg-wordle-gray'
       }`}
     >
       <span className="text-white font-bold text-[9px] leading-tight line-clamp-2">{name}</span>
-      <span className="text-white/50 text-[8px] mt-1">{match ? '✓' : '✗'}</span>
+      <span className="text-white/70 text-[8px] mt-1">{indicator || (match ? '✓' : '✗')}</span>
     </div>
   );
 }

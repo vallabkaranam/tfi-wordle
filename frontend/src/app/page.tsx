@@ -6,14 +6,14 @@ import { fetchMovies, submitGuess } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
 import { loadStats, recordDailyGame, GameStats } from '../lib/stats';
 import { buildShareText, clearStoredGame, loadStoredGame, saveStoredGame } from '../lib/gameState';
+import { canUseNativeShare, copyText } from '../lib/share';
 import { trackError, trackEvent } from '../lib/telemetry';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
 import StatsModal from '../components/StatsModal';
-import HintPoster from '../components/HintPoster';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
-import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Share2, Check, Sparkles, Flame, Clapperboard } from 'lucide-react';
+import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Share2, Check, Sparkles, Flame, Clapperboard, Copy } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Countdown hook — ticks every second to midnight
@@ -41,21 +41,22 @@ const LANG_THEME: Record<Language, { accent: string; accentBg: string; industry:
   hi: { accent: 'text-orange-400', accentBg: 'bg-orange-500/10', industry: 'Bollywood', label: 'BFI' },
   ta: { accent: 'text-red-400',    accentBg: 'bg-red-500/10',    industry: 'Kollywood', label: 'KFI' },
 };
+const MAX_ATTEMPTS = 6;
 
 const HERO_COPY: Record<Language, { title: string; blurb: string; chips: string[] }> = {
   te: {
     title: 'Decode the Telugu movie from the people behind it.',
-    blurb: 'Every guess reveals hero, heroine, director, music, and producer clues. It is movie nerdery with Wordle tension.',
+    blurb: 'Every guess reveals hero, heroine, director, music, producer, and year clues. It is movie nerdery with Wordle tension.',
     chips: ['Daily puzzle', 'Shareable score', 'Tollywood deep cuts'],
   },
   hi: {
     title: 'Crack the Hindi movie using cast-and-crew clues.',
-    blurb: 'Search any Hindi title, compare the key roles, and hunt down the answer in five shots or less.',
+    blurb: 'Search any Hindi title, compare the key roles plus year, and hunt down the answer in six shots or less.',
     chips: ['Daily puzzle', 'Bollywood mode', 'Built for bragging rights'],
   },
   ta: {
     title: 'Read the room, then guess the Tamil movie.',
-    blurb: 'A fast movie puzzle where the real clue trail is hero, heroine, director, music, and producer.',
+    blurb: 'A fast movie puzzle where the real clue trail is hero, heroine, director, music, producer, and year.',
     chips: ['Daily puzzle', 'Kollywood mode', 'Perfect to share'],
   },
 };
@@ -95,6 +96,7 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const [stats, setStats] = useState<GameStats>(() => loadStats());
   const [copiedShare, setCopiedShare] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [hasLoadedStoredGame, setHasLoadedStoredGame] = useState(false);
   const hasTrackedInitialView = useRef(false);
 
@@ -179,6 +181,15 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [copiedShare]);
 
+  useEffect(() => {
+    if (!shareError) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setShareError(null), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [shareError]);
+
   // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
@@ -237,7 +248,7 @@ export default function Home() {
     resetGame(Math.floor(Math.random() * 1_000_000));
   };
 
-  const handleShare = useCallback(async () => {
+  const handleCopyShare = useCallback(async () => {
     const shareText = buildShareText(
       gameStatus,
       guesses,
@@ -247,14 +258,44 @@ export default function Home() {
     );
 
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `${theme.label} Wordle`,
-          text: shareText,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareText);
-      }
+      await copyText(shareText);
+      trackEvent({
+        event: 'result_copied',
+        lang: language,
+        seed,
+        status: gameStatus,
+        attempts: guesses.length,
+        metadata: { is_random: isRandom },
+      });
+      setShareError(null);
+      setCopiedShare(true);
+    } catch (error) {
+      console.error('Copy failed:', error);
+      trackError('copy_failed', error, { lang: language, seed, status: gameStatus });
+      setShareError('Copy failed on this browser.');
+    }
+  }, [gameStatus, guesses, theme.label, isRandom, language, seed]);
+
+  const handleNativeShare = useCallback(async () => {
+    const shareText = buildShareText(
+      gameStatus,
+      guesses,
+      theme.label,
+      isRandom,
+      typeof window !== 'undefined' ? window.location.origin : undefined
+    );
+
+    if (!canUseNativeShare()) {
+      await handleCopyShare();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: `${theme.label} Wordle`,
+        text: shareText,
+        url: typeof window !== 'undefined' ? window.location.origin : undefined,
+      });
       trackEvent({
         event: 'result_shared',
         lang: language,
@@ -263,12 +304,17 @@ export default function Home() {
         attempts: guesses.length,
         metadata: { is_random: isRandom },
       });
+      setShareError(null);
       setCopiedShare(true);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error('Share failed:', error);
       trackError('share_failed', error, { lang: language, seed, status: gameStatus });
+      setShareError('Share failed. Try copying instead.');
     }
-  }, [gameStatus, guesses, theme.label, isRandom, language, seed]);
+  }, [gameStatus, guesses, theme.label, isRandom, language, seed, handleCopyShare]);
 
   async function triggerConfetti() {
     const confetti = (await import('canvas-confetti')).default;
@@ -290,6 +336,7 @@ export default function Home() {
   // Render
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
+  const nativeShareAvailable = canUseNativeShare();
   const shareText = canShare
     ? buildShareText(
         gameStatus,
@@ -318,9 +365,10 @@ export default function Home() {
           <button
             onClick={switchToDaily}
             title="Daily puzzle"
+            disabled={!isRandom}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
               !isRandom
-                ? 'bg-white/10 text-white ring-1 ring-white/20'
+                ? 'bg-white/10 text-white ring-1 ring-white/20 cursor-default'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
             }`}
           >
@@ -329,7 +377,7 @@ export default function Home() {
           </button>
           <button
             onClick={switchToRandom}
-            title="Random movie"
+            title={isRandom ? "New random movie" : "Random movie"}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
               isRandom
                 ? `${theme.accentBg} ${theme.accent} ring-1 ring-current/30`
@@ -337,7 +385,7 @@ export default function Home() {
             }`}
           >
             <Shuffle className="h-3 w-3" />
-            Random
+            {isRandom ? 'New Random' : 'Random'}
           </button>
         </div>
 
@@ -394,8 +442,8 @@ export default function Home() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                 <Flame className="mb-2 h-4 w-4 text-orange-400" />
-                <div className="font-bold text-white">Five-role deduction</div>
-                <div className="mt-1 text-gray-400">Hero, heroine, director, music, producer.</div>
+                <div className="font-bold text-white">Six-column deduction</div>
+                <div className="mt-1 text-gray-400">Hero, heroine, director, music, producer, year.</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                 <Share2 className="mb-2 h-4 w-4 text-sky-300" />
@@ -413,8 +461,8 @@ export default function Home() {
           </p>
           {gameStatus === 'in_progress' && (
             <p className="text-sm text-gray-400">
-              <span className={`font-bold ${theme.accent}`}>{5 - guesses.length}</span>
-              {' '}guess{5 - guesses.length !== 1 ? 'es' : ''} left
+              <span className={`font-bold ${theme.accent}`}>{MAX_ATTEMPTS - guesses.length}</span>
+              {' '}guess{MAX_ATTEMPTS - guesses.length !== 1 ? 'es' : ''} left
             </p>
           )}
         </div>
@@ -436,14 +484,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {/* Hint poster — appears after 2 wrong guesses */}
-        {gameStatus === 'in_progress' && (
-          <HintPoster
-            posterPath={guesses.length >= 2 ? guesses[guesses.length - 1]?.poster_path : undefined}
-            wrongGuesses={wrongGuesses}
-          />
-        )}
 
         {/* Guess grid */}
         <div className="mt-5">
@@ -506,6 +546,10 @@ export default function Home() {
                       <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">Producer</span>
                       <p className="text-white/80 font-medium leading-tight truncate">{target.producer}</p>
                     </div>
+                    <div className="col-span-2">
+                      <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">Year</span>
+                      <p className="text-white/80 font-medium leading-tight truncate">{target.year ?? 'Unknown'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -517,8 +561,16 @@ export default function Home() {
                 onClick={playAgain}
                 className="flex-1 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-sm"
               >
-                Play Again
+                {isRandom ? 'New Random' : 'Play Random'}
               </button>
+              {!isRandom && (
+                <button
+                  onClick={switchToRandom}
+                  className="px-4 py-3 bg-white/5 border border-white/10 text-gray-300 font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm"
+                >
+                  Random
+                </button>
+              )}
               {isRandom && (
                 <button
                   onClick={switchToDaily}
@@ -534,13 +586,27 @@ export default function Home() {
                   <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-gray-500">Share Preview</div>
                   <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-200">{shareText}</pre>
                 </div>
-                <button
-                  onClick={handleShare}
-                  className="mt-3 w-full py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
-                >
-                  {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Share2 className="h-4 w-4" />}
-                  {copiedShare ? 'Shared' : 'Share Result'}
-                </button>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={handleCopyShare}
+                    className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                  >
+                    {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Copy className="h-4 w-4" />}
+                    {copiedShare ? 'Copied' : 'Copy Result'}
+                  </button>
+                  {nativeShareAvailable && (
+                    <button
+                      onClick={handleNativeShare}
+                      className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                    >
+                      <Share2 className="h-4 w-4" />
+                      Share
+                    </button>
+                  )}
+                </div>
+                {shareError && (
+                  <p className="mt-2 text-center text-xs text-rose-300">{shareError}</p>
+                )}
               </>
             )}
           </div>

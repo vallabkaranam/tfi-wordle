@@ -23,12 +23,13 @@ export default function Grid({ guesses }: GridProps) {
     <div className="w-full max-w-6xl mx-auto space-y-3 sm:space-y-4 pb-20">
       
       {/* Column Labels (Hero, heroine, etc.) */}
-      <div className="grid grid-cols-5 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs uppercase text-gray-400 mb-2 px-2 sm:px-4 font-bold tracking-widest opacity-80">
+      <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs uppercase text-gray-400 mb-2 px-2 sm:px-4 font-bold tracking-widest opacity-80">
         <div>Hero</div>
         <div>Heroine</div>
         <div>Director</div>
         <div>Music</div>
         <div>Producer</div>
+        <div>Year</div>
       </div>
       
       {/* 
@@ -44,7 +45,7 @@ export default function Grid({ guesses }: GridProps) {
           </div>
           
           {/* Individual Field FlipCards: Color-coded results per field */}
-          <div className="grid grid-cols-5 gap-1 sm:gap-2">
+          <div className="grid grid-cols-6 gap-1 sm:gap-2">
             <FlipCard 
               content={guess.values.hero} 
               label="Hero" 
@@ -79,6 +80,25 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.producer ? 'correct' : 'absent'} 
               delay={0.4}
               imageUrl={guess.images?.producer}
+            />
+            <FlipCard
+              content={guess.values.year ? String(guess.values.year) : '????'}
+              label="Year"
+              status={
+                guess.matches.year === 'correct'
+                  ? 'correct'
+                  : guess.matches.year === 'unknown'
+                    ? 'absent'
+                    : guess.matches.year
+              }
+              indicator={
+                guess.matches.year === 'higher'
+                  ? '↑'
+                  : guess.matches.year === 'lower'
+                    ? '↓'
+                    : undefined
+              }
+              delay={0.5}
             />
           </div>
         </div>
