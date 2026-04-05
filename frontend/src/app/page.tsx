@@ -413,61 +413,36 @@ export default function Home() {
         </div>
       </header>
       <div className="w-full max-w-5xl flex-1 px-4 pt-5 pb-24">
-        <section className="mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(255,215,0,0.18),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-5 sm:p-7 shadow-2xl">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-2xl">
-              <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-gray-300">
-                <Sparkles className="h-3.5 w-3.5 text-gold" />
-                Movie puzzle for actual Indian cinema fans
+        <section className="mb-4 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-4 py-4 shadow-xl sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase tracking-[0.25em] font-semibold">
+                {theme.industry} · {isRandom ? 'Random Mode' : 'Daily Puzzle'}
               </p>
-              <h2 className="max-w-xl text-3xl font-black leading-tight text-white sm:text-4xl">
+              <h2 className="mt-1 text-lg font-black text-white sm:text-xl">
                 {hero.title}
               </h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-gray-300 sm:text-base">
-                {hero.blurb}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {hero.chips.map((chip) => (
-                  <span key={chip} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-gray-200">
-                    {chip}
-                  </span>
-                ))}
-              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-left text-xs sm:min-w-[260px]">
-              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
-                <Clapperboard className={`mb-2 h-4 w-4 ${theme.accent}`} />
-                <div className="font-bold text-white">Search any title</div>
-                <div className="mt-1 text-gray-400">Pull from TMDB and local movie pools.</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
-                <Flame className="mb-2 h-4 w-4 text-orange-400" />
-                <div className="font-bold text-white">Six-column deduction</div>
-                <div className="mt-1 text-gray-400">Hero, heroine, director, music, producer, year.</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
-                <Share2 className="mb-2 h-4 w-4 text-sky-300" />
-                <div className="font-bold text-white">Share the flex</div>
-                <div className="mt-1 text-gray-400">Post your score after every daily win.</div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className={`inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 font-semibold ${theme.accentBg} ${theme.accent}`}>
+                <Clapperboard className="h-3.5 w-3.5" />
+                Search any title
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-gray-300">
+                <Flame className="h-3.5 w-3.5 text-orange-400" />
+                6 columns
+              </span>
+              {gameStatus === 'in_progress' && (
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5 font-semibold text-gray-200">
+                  <Sparkles className="h-3.5 w-3.5 text-gold" />
+                  <span className={theme.accent}>{MAX_ATTEMPTS - guesses.length}</span>
+                  guess{MAX_ATTEMPTS - guesses.length !== 1 ? 'es' : ''} left
+                </span>
+              )}
             </div>
           </div>
         </section>
 
-        {/* Context strip */}
-        <div className="text-center mb-5">
-          <p className="text-[11px] text-gray-600 uppercase tracking-widest font-semibold mb-0.5">
-            {theme.industry} · {isRandom ? 'Random Mode' : 'Daily Puzzle'}
-          </p>
-          {gameStatus === 'in_progress' && (
-            <p className="text-sm text-gray-400">
-              <span className={`font-bold ${theme.accent}`}>{MAX_ATTEMPTS - guesses.length}</span>
-              {' '}guess{MAX_ATTEMPTS - guesses.length !== 1 ? 'es' : ''} left
-            </p>
-          )}
-        </div>
-
-        {/* Search */}
         <div className="relative">
           <SearchBar
             movies={movies}
@@ -485,10 +460,10 @@ export default function Home() {
           )}
         </div>
 
-        {/* Guess grid */}
         <div className="mt-5">
           <Grid guesses={guesses} />
         </div>
+
       </div>
 
       {/* ── Modals ── */}
