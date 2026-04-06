@@ -71,6 +71,7 @@ _SNAPSHOT_LOADED = False
 _LAST_REFRESHED_AT: Dict[str, Optional[str]] = {lang: None for lang in SUPPORTED_LANGS}
 _PRIMARY_STARTUP_LANG = os.getenv("PRIMARY_STARTUP_LANG", "te")
 _SECONDARY_WARMUP_DELAY_SECONDS = int(os.getenv("SECONDARY_WARMUP_DELAY_SECONDS", "8"))
+_DAILY_TARGET_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def _normalize_search_text(value: str) -> str:
@@ -677,11 +678,30 @@ def search_movies_tmdb(query: str, lang: str = 'te'):
     ))
     return [{k: v for k, v in movie.items() if k != "popularity"} for movie in unique_results[:_SEARCH_TARGET_RESULTS]]
 
+
+def _daily_target_cache_key(seed: Optional[int], lang: str) -> str:
+    if seed is not None:
+        return f"random:{lang}:{seed}"
+    return f"daily:{lang}:{date.today().isoformat()}"
+
+
 def get_daily_movie(seed: Optional[int] = None, lang: str = 'te'):
+    cache_key = _daily_target_cache_key(seed, lang)
+    with _CACHE_LOCK:
+        cached_target = _DAILY_TARGET_CACHE.get(cache_key)
+        if cached_target:
+            return dict(cached_target)
+
     pool = fetch_movies_for_lang(lang)
-    if not pool: return _pick_live_movie(lang) or {"id": 0, "title": "Empty"}
-    random.seed(seed if seed is not None else f"{date.today()}-{lang}-v1")
-    return random.choice(sorted(pool, key=lambda x: x["id"]))
+    if not pool:
+        target = _pick_live_movie(lang) or {"id": 0, "title": "Empty"}
+    else:
+        random.seed(seed if seed is not None else f"{date.today()}-{lang}-v1")
+        target = random.choice(sorted(pool, key=lambda x: x["id"]))
+
+    with _CACHE_LOCK:
+        _DAILY_TARGET_CACHE[cache_key] = dict(target)
+    return dict(target)
 
 def process_guess(guess_id: int, prev: List[GuessResult], seed: Optional[int] = None, lang: str = 'te'):
     target = get_daily_movie(seed, lang)
