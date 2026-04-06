@@ -394,30 +394,13 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="relative">
-          <SearchBar
-            movies={movies}
-            onGuess={handleGuess}
-            disabled={gameStatus !== 'in_progress' || isGuessing}
-            lang={language}
-          />
-          {isGuessing && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-cinema/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
-              <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full border border-gold/30 shadow-lg animate-pulse">
-                <Loader2 className="h-4 w-4 text-gold animate-spin" />
-                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking...</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {!isRandom && gameStatus !== 'in_progress' && (
-          <section className="mt-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 shadow-xl sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        {!isRandom && gameStatus !== 'in_progress' && target && (
+          <section className="mb-5 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-4 shadow-xl sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500 font-semibold">Daily Complete</p>
                 <h3 className={`mt-1 text-xl font-black ${gameStatus === 'won' ? theme.accent : 'text-white'}`}>
-                  {gameStatus === 'won' ? 'You got it.' : 'You are done for today.'}
+                  {gameStatus === 'won' ? target.title : `Today’s answer was ${target.title}.`}
                 </h3>
                 <p className="mt-1 text-sm text-gray-400">
                   {gameStatus === 'won'
@@ -425,7 +408,7 @@ export default function Home() {
                     : `Your board stays here for review. Next daily puzzle unlocks in ${countdown}.`}
                 </p>
               </div>
-              <div className="flex gap-2 sm:hidden">
+              <div className="flex gap-2 sm:shrink-0">
                 <button
                   onClick={switchToRandom}
                   className="px-4 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-sm"
@@ -444,44 +427,57 @@ export default function Home() {
               </div>
             </div>
 
-            {target && (
-              <div className="mt-4 flex gap-3 rounded-xl border border-white/5 bg-black/30 p-3.5">
-                {target.poster_path ? (
-                  <Image
-                    src={`https://image.tmdb.org/t/p/w185${target.poster_path}`}
-                    alt={target.title}
-                    width={56}
-                    height={80}
-                    sizes="56px"
-                    className="h-20 w-14 rounded-lg object-cover shrink-0 shadow-lg"
-                  />
-                ) : (
-                  <div className="w-14 h-20 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-[10px] text-gray-600">No poster</div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <h4 className={`font-bold text-base truncate ${theme.accent}`}>{target.title}</h4>
-                  <p className="text-gray-500 text-xs mb-1.5">{target.year}</p>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                    {([['Hero', target.hero], ['Heroine', target.heroine], ['Director', target.director], ['Music', target.music]] as const).map(([role, name]) => (
-                      <div key={role}>
-                        <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">{role}</span>
-                        <p className="text-white/80 font-medium leading-tight truncate">{name}</p>
-                      </div>
-                    ))}
-                    <div className="col-span-2">
-                      <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">Producer</span>
-                      <p className="text-white/80 font-medium leading-tight truncate">{target.producer}</p>
+            <div className="mt-4 flex gap-3 rounded-xl border border-white/5 bg-black/30 p-3.5">
+              {target.poster_path ? (
+                <Image
+                  src={`https://image.tmdb.org/t/p/w185${target.poster_path}`}
+                  alt={target.title}
+                  width={56}
+                  height={80}
+                  sizes="56px"
+                  className="h-20 w-14 rounded-lg object-cover shrink-0 shadow-lg"
+                />
+              ) : (
+                <div className="w-14 h-20 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-[10px] text-gray-600">No poster</div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                  {([['Hero', target.hero], ['Heroine', target.heroine], ['Director', target.director], ['Music', target.music]] as const).map(([role, name]) => (
+                    <div key={role}>
+                      <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">{role}</span>
+                      <p className="text-white/80 font-medium leading-tight truncate">{name}</p>
                     </div>
+                  ))}
+                  <div className="col-span-2">
+                    <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">Producer</span>
+                    <p className="text-white/80 font-medium leading-tight truncate">{target.producer}</p>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {shareError && (
               <p className="mt-3 text-xs text-rose-300">{shareError}</p>
             )}
           </section>
         )}
+
+        <div className="relative">
+          <SearchBar
+            movies={movies}
+            onGuess={handleGuess}
+            disabled={gameStatus !== 'in_progress' || isGuessing}
+            lang={language}
+          />
+          {isGuessing && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-cinema/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
+              <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full border border-gold/30 shadow-lg animate-pulse">
+                <Loader2 className="h-4 w-4 text-gold animate-spin" />
+                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking...</span>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="mt-5">
           <Grid guesses={guesses} />
