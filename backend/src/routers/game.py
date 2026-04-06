@@ -12,6 +12,7 @@ from ..services.game_service import (
     process_guess,
     refresh_movie_data,
     search_movies_tmdb,
+    trigger_refresh_movie_data,
 )
 from ..models.schemas import Movie, GuessRequest, GuessResponse, TelemetryEvent
 
@@ -130,6 +131,6 @@ def refresh_cache(
 ):
     _authorize_refresh_token(x_refresh_token)
     selected_lang = _validate_lang(lang) if lang else None
-    refreshed = refresh_movie_data(selected_lang)
-    logger.info("manual cache refresh completed lang=%s refreshed=%s", selected_lang or "all", refreshed)
-    return {"ok": True, "refreshed": refreshed, "cache_status": get_cache_status()}
+    trigger_refresh_movie_data(selected_lang)
+    logger.info("manual cache refresh triggered lang=%s", selected_lang or "all")
+    return {"ok": True, "triggered": selected_lang or "all", "cache_status": get_cache_status()}

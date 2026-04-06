@@ -297,6 +297,16 @@ def refresh_movie_data(lang: Optional[str] = None):
     return {code: len(fetch_movies_for_lang(code)) for code in SUPPORTED_LANGS}
 
 
+def trigger_refresh_movie_data(lang: Optional[str] = None):
+    def runner():
+        try:
+            refresh_movie_data(lang)
+        except Exception:
+            logger.exception("background cache refresh failed lang=%s", lang or "all")
+
+    threading.Thread(target=runner, daemon=True).start()
+
+
 def get_cache_status() -> Dict[str, Any]:
     _load_snapshot_from_disk()
     with _CACHE_LOCK:
