@@ -69,6 +69,7 @@ _MIN_LOCAL_SEARCH_RESULTS = 5
 _SCHEDULER_STARTED = False
 _SNAPSHOT_LOADED = False
 _LAST_REFRESHED_AT: Dict[str, Optional[str]] = {lang: None for lang in SUPPORTED_LANGS}
+_PRIMARY_STARTUP_LANG = os.getenv("PRIMARY_STARTUP_LANG", "te")
 
 
 def _normalize_search_text(value: str) -> str:
@@ -442,6 +443,10 @@ def _perform_data_refresh(lang: str = 'te'):
     print(f"[INFO] Syncing {SUPPORTED_LANGS.get(lang)} pool...")
     movies, found_ids = [], set()
 
+    def publish_progress():
+        with _CACHE_LOCK:
+            _MOVIES_CACHE[lang] = list(movies)
+
     def process_item(item):
         tid = item["id"]
         if tid in found_ids:
@@ -494,8 +499,13 @@ def _perform_data_refresh(lang: str = 'te'):
                     if movie_data and movie_data["id"] not in found_ids:
                         movies.append(movie_data)
                         found_ids.add(movie_data["id"])
+                        if len(movies) % 20 == 0:
+                            publish_progress()
                         if len(found_ids) >= target_pool_size:
                             break
+
+            if movies:
+                publish_progress()
 
             if page >= payload.get("total_pages", page):
                 break
@@ -512,8 +522,7 @@ def _perform_data_refresh(lang: str = 'te'):
 def initialize_movie_data(background: bool = False):
     _load_snapshot_from_disk()
     _start_refresh_scheduler()
-    for lang in SUPPORTED_LANGS:
-        _ensure_movie_data(lang, background=background)
+    _ensure_movie_data(_PRIMARY_STARTUP_LANG if _PRIMARY_STARTUP_LANG in SUPPORTED_LANGS else 'te', background=background)
 
 
 def _start_refresh_thread(lang: str):
