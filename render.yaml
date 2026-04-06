@@ -8,6 +8,7 @@ services:
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -21,6 +22,8 @@ services:
         value: 6
       - key: CACHE_REFRESH_MINUTE_ET
         value: 0
+      - key: REFRESH_JOB_TOKEN
+        generateValue: true
 
   # Frontend Service
   - type: web
@@ -34,3 +37,40 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false  # User must provide (backend URL + /api)
+
+  # Daily cache refresh backup job
+  - type: cron
+    name: tfi-wordle-refresh-cache
+    runtime: python
+    repo: https://github.com/vallabkaranam/tfi-wordle
+    plan: starter
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python backend/scripts/http_job.py
+    schedule: "0 10 * * *"
+    envVars:
+      - key: JOB_KIND
+        value: refresh
+      - key: BACKEND_BASE_URL
+        sync: false  # Set to your backend Render URL, e.g. https://tfi-wordle-backend.onrender.com
+      - key: REFRESH_JOB_TOKEN
+        fromService:
+          name: tfi-wordle-backend
+          type: web
+          envVarKey: REFRESH_JOB_TOKEN
+
+  # Stopgap keepalive ping to reduce cold starts on free web service
+  - type: cron
+    name: tfi-wordle-keepalive
+    runtime: python
+    repo: https://github.com/vallabkaranam/tfi-wordle
+    plan: starter
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python backend/scripts/http_job.py
+    schedule: "*/10 * * * *"
+    envVars:
+      - key: JOB_KIND
+        value: health
+      - key: BACKEND_BASE_URL
+        sync: false  # Set to your backend Render URL, e.g. https://tfi-wordle-backend.onrender.com

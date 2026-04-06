@@ -1,9 +1,18 @@
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from typing import List
 import logging
+import hmac
+import os
 
-from ..services.game_service import fetch_movies_for_lang, get_daily_movie, process_guess, search_movies_tmdb
+from ..services.game_service import (
+    fetch_movies_for_lang,
+    get_cache_status,
+    get_daily_movie,
+    process_guess,
+    refresh_movie_data,
+    search_movies_tmdb,
+)
 from ..models.schemas import Movie, GuessRequest, GuessResponse, TelemetryEvent
 
 router = APIRouter(prefix="/api")
@@ -12,11 +21,21 @@ logger = logging.getLogger(__name__)
 # Allowed language codes — validated at the router boundary so service functions
 # receive only clean, trusted values.
 VALID_LANGS = {'te', 'hi', 'ta'}
+REFRESH_JOB_TOKEN = os.getenv("REFRESH_JOB_TOKEN")
 
 
 def _validate_lang(lang: str) -> str:
     """Ensure lang is a supported ISO-639-1 code. Defaults to 'te' on invalid input."""
     return lang if lang in VALID_LANGS else 'te'
+
+
+def _authorize_refresh_token(token: str | None):
+    if not REFRESH_JOB_TOKEN:
+        logger.warning("refresh endpoint called without REFRESH_JOB_TOKEN configured")
+        return
+
+    if not token or not hmac.compare_digest(token, REFRESH_JOB_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 
 @router.get("/movies", response_model=List[Movie])
@@ -90,3 +109,27 @@ def ingest_telemetry(payload: TelemetryEvent, request: Request):
         request.client.host if request.client else "unknown",
     )
     return {"ok": True}
+
+
+@router.get("/health")
+def health_check():
+    status = get_cache_status()
+    degraded_languages = [lang for lang, details in status["languages"].items() if details["movie_count"] == 0]
+    return {
+        "ok": len(degraded_languages) == 0,
+        "service": "tfi-wordle-backend",
+        "degraded_languages": degraded_languages,
+        **status,
+    }
+
+
+@router.post("/admin/refresh-cache")
+def refresh_cache(
+    lang: str | None = Query(None, description="Optional language code to refresh"),
+    x_refresh_token: str | None = Header(None),
+):
+    _authorize_refresh_token(x_refresh_token)
+    selected_lang = _validate_lang(lang) if lang else None
+    refreshed = refresh_movie_data(selected_lang)
+    logger.info("manual cache refresh completed lang=%s refreshed=%s", selected_lang or "all", refreshed)
+    return {"ok": True, "refreshed": refreshed, "cache_status": get_cache_status()}

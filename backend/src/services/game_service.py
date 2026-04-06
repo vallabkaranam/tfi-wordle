@@ -271,6 +271,37 @@ def _refresh_all_languages():
             logger.exception("scheduled cache refresh failed lang=%s", lang)
 
 
+def refresh_movie_data(lang: Optional[str] = None):
+    if lang:
+        _perform_data_refresh(lang)
+        return {lang: len(fetch_movies_for_lang(lang))}
+
+    _refresh_all_languages()
+    return {code: len(fetch_movies_for_lang(code)) for code in SUPPORTED_LANGS}
+
+
+def get_cache_status() -> Dict[str, Any]:
+    _load_snapshot_from_disk()
+    with _CACHE_LOCK:
+        languages = {
+            lang: {
+                "movie_count": len(_MOVIES_CACHE.get(lang, [])),
+                "updated_at": _LAST_REFRESHED_AT.get(lang),
+                "fresh": _snapshot_is_fresh(_LAST_REFRESHED_AT.get(lang)),
+            }
+            for lang in SUPPORTED_LANGS
+        }
+
+    return {
+        "languages": languages,
+        "refresh_schedule": {
+            "timezone": _CACHE_TIMEZONE.key,
+            "hour": _CACHE_REFRESH_HOUR,
+            "minute": _CACHE_REFRESH_MINUTE,
+        },
+    }
+
+
 def _start_refresh_scheduler():
     global _SCHEDULER_STARTED
 
