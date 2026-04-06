@@ -17,12 +17,13 @@ import json
 import logging
 import re
 import unicodedata
-from datetime import date
+from datetime import date, datetime, timedelta
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from difflib import SequenceMatcher
 from typing import List, Dict, Optional, Any
+from zoneinfo import ZoneInfo
 from ..models.schemas import Movie, GuessResult, GuessValues, GuessImages, GuessMatches, GuessResponse
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Metadata file containing manually curated movie data mappings for Telugu Cinema.
 # This file is used to ensure high accuracy for "Blockbuster" titles.
 METADATA_FILE = os.path.join(BASE_DIR, "data", "tollywood_metadata.json")
+CACHE_SNAPSHOT_FILE = os.path.join(BASE_DIR, "data", "movie_cache_snapshot.json")
 
 # In-memory per-language caches to ensure fast game-play once initialized.
 _MOVIES_CACHE: Dict[str, List[Dict[str, Any]]] = {'te': [], 'hi': [], 'ta': []}
@@ -50,7 +52,7 @@ _INIT_LOCK = threading.RLock()
 _INIT_STARTED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
 _INIT_COMPLETED: Dict[str, bool] = {lang: False for lang in SUPPORTED_LANGS}
 _TMDB_TIMEOUT = (3.05, 8)
-_SEARCH_MAX_PAGES = 4
+_SEARCH_MAX_PAGES = 2
 _SEARCH_TARGET_RESULTS = 20
 _DISCOVER_PAGE_LIMIT = 25
 _DISCOVER_TARGET_POOL_SIZE = 350
@@ -58,6 +60,14 @@ _DISCOVER_VOTE_FLOORS = (100, 50, 25, 10, 5)
 _DISCOVER_MIN_WORKERS = 4
 _DISCOVER_MAX_WORKERS = 12
 _LIVE_PICK_CANDIDATE_LIMIT = 12
+_CACHE_TIMEZONE = ZoneInfo(os.getenv("CACHE_REFRESH_TIMEZONE", "America/New_York"))
+_CACHE_REFRESH_HOUR = int(os.getenv("CACHE_REFRESH_HOUR_ET", "6"))
+_CACHE_REFRESH_MINUTE = int(os.getenv("CACHE_REFRESH_MINUTE_ET", "0"))
+_CACHE_SNAPSHOT_MAX_AGE_HOURS = int(os.getenv("CACHE_SNAPSHOT_MAX_AGE_HOURS", "36"))
+_MIN_LOCAL_SEARCH_RESULTS = 5
+_SCHEDULER_STARTED = False
+_SNAPSHOT_LOADED = False
+_LAST_REFRESHED_AT: Dict[str, Optional[str]] = {lang: None for lang in SUPPORTED_LANGS}
 
 
 def _normalize_search_text(value: str) -> str:
@@ -174,6 +184,116 @@ def _tmdb_get(path: str, headers: Dict[str, str], params: Optional[Dict[str, Any
         logger.warning("tmdb request exception path=%s params=%s error=%s", path, params, exc)
         return None
 
+
+def _snapshot_is_fresh(updated_at: Optional[str]) -> bool:
+    if not updated_at:
+        return False
+
+    try:
+        snapshot_time = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return False
+
+    if snapshot_time.tzinfo is None:
+        snapshot_time = snapshot_time.replace(tzinfo=_CACHE_TIMEZONE)
+
+    age = datetime.now(_CACHE_TIMEZONE) - snapshot_time.astimezone(_CACHE_TIMEZONE)
+    return age <= timedelta(hours=_CACHE_SNAPSHOT_MAX_AGE_HOURS)
+
+
+def _load_snapshot_from_disk():
+    global _SNAPSHOT_LOADED
+
+    with _CACHE_LOCK:
+        if _SNAPSHOT_LOADED:
+            return
+
+    if not os.path.exists(CACHE_SNAPSHOT_FILE):
+        with _CACHE_LOCK:
+            _SNAPSHOT_LOADED = True
+        return
+
+    try:
+        with open(CACHE_SNAPSHOT_FILE, "r", encoding="utf-8") as snapshot_file:
+            payload = json.load(snapshot_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("cache snapshot load failed file=%s error=%s", CACHE_SNAPSHOT_FILE, exc)
+        with _CACHE_LOCK:
+            _SNAPSHOT_LOADED = True
+        return
+
+    cache_payload = payload.get("languages", {})
+    timestamp_payload = payload.get("updated_at", {})
+
+    with _CACHE_LOCK:
+        for lang in SUPPORTED_LANGS:
+            snapshot_movies = cache_payload.get(lang)
+            snapshot_updated_at = timestamp_payload.get(lang)
+            if isinstance(snapshot_movies, list) and snapshot_movies and _snapshot_is_fresh(snapshot_updated_at):
+                _MOVIES_CACHE[lang] = snapshot_movies
+                _INIT_COMPLETED[lang] = True
+                _INIT_STARTED[lang] = False
+                _LAST_REFRESHED_AT[lang] = snapshot_updated_at
+        _SNAPSHOT_LOADED = True
+
+
+def _save_snapshot_to_disk():
+    payload = {
+        "updated_at": _LAST_REFRESHED_AT,
+        "languages": _MOVIES_CACHE,
+    }
+
+    try:
+        with open(CACHE_SNAPSHOT_FILE, "w", encoding="utf-8") as snapshot_file:
+            json.dump(payload, snapshot_file, ensure_ascii=False)
+    except OSError as exc:
+        logger.warning("cache snapshot save failed file=%s error=%s", CACHE_SNAPSHOT_FILE, exc)
+
+
+def _next_refresh_delay_seconds(now: Optional[datetime] = None) -> float:
+    current = now or datetime.now(_CACHE_TIMEZONE)
+    next_run = current.replace(
+        hour=_CACHE_REFRESH_HOUR,
+        minute=_CACHE_REFRESH_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if next_run <= current:
+        next_run += timedelta(days=1)
+    return max(60.0, (next_run - current).total_seconds())
+
+
+def _refresh_all_languages():
+    for lang in SUPPORTED_LANGS:
+        try:
+            _perform_data_refresh(lang)
+        except Exception:
+            logger.exception("scheduled cache refresh failed lang=%s", lang)
+
+
+def _start_refresh_scheduler():
+    global _SCHEDULER_STARTED
+
+    with _INIT_LOCK:
+        if _SCHEDULER_STARTED:
+            return
+        _SCHEDULER_STARTED = True
+
+    def runner():
+        while True:
+            delay_seconds = _next_refresh_delay_seconds()
+            logger.info(
+                "next movie cache refresh scheduled in %.0fs at %02d:%02d %s",
+                delay_seconds,
+                _CACHE_REFRESH_HOUR,
+                _CACHE_REFRESH_MINUTE,
+                _CACHE_TIMEZONE.key,
+            )
+            threading.Event().wait(delay_seconds)
+            _refresh_all_languages()
+
+    threading.Thread(target=runner, daemon=True).start()
+
 # -------------------------------------------------------------------
 # METADATA & DATA LOADING
 # -------------------------------------------------------------------
@@ -263,7 +383,10 @@ def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
 
 def _perform_data_refresh(lang: str = 'te'):
     """Populates cache for a language using parallel workers."""
-    if not TMDB_READ_TOKEN: return
+    if not TMDB_READ_TOKEN:
+        with _INIT_LOCK:
+            _INIT_STARTED[lang] = False
+        return
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}", "Content-Type": "application/json;charset=utf-8"}
 
     is_curated_lang = (lang == 'te')
@@ -333,11 +456,16 @@ def _perform_data_refresh(lang: str = 'te'):
 
     with _CACHE_LOCK:
         _MOVIES_CACHE[lang] = movies
+        _LAST_REFRESHED_AT[lang] = datetime.now(_CACHE_TIMEZONE).isoformat()
+        _save_snapshot_to_disk()
     with _INIT_LOCK:
         _INIT_COMPLETED[lang] = True
+        _INIT_STARTED[lang] = False
     print(f"[SUCCESS] {lang} ready: {len(movies)} movies.")
 
 def initialize_movie_data(background: bool = False):
+    _load_snapshot_from_disk()
+    _start_refresh_scheduler()
     for lang in SUPPORTED_LANGS:
         _ensure_movie_data(lang, background=background)
 
@@ -355,7 +483,18 @@ def _start_refresh_thread(lang: str):
     thread.start()
 
 
+def _trigger_background_refresh_if_idle(lang: str):
+    with _INIT_LOCK:
+        if _INIT_STARTED[lang]:
+            return
+        _INIT_STARTED[lang] = True
+
+    _start_refresh_thread(lang)
+
+
 def _ensure_movie_data(lang: str = 'te', background: bool = True):
+    _load_snapshot_from_disk()
+
     with _CACHE_LOCK:
         if _MOVIES_CACHE.get(lang):
             return
@@ -382,7 +521,12 @@ def _ensure_movie_data(lang: str = 'te', background: bool = True):
 
 def fetch_movies_for_lang(lang: str = 'te'):
     _ensure_movie_data(lang, background=True)
-    with _CACHE_LOCK: return list(_MOVIES_CACHE.get(lang, []))
+    with _CACHE_LOCK:
+        needs_refresh = not _snapshot_is_fresh(_LAST_REFRESHED_AT.get(lang))
+    if needs_refresh:
+        _trigger_background_refresh_if_idle(lang)
+    with _CACHE_LOCK:
+        return list(_MOVIES_CACHE.get(lang, []))
 
 def _pick_live_movie(lang: str):
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
@@ -403,15 +547,14 @@ def _pick_live_movie(lang: str):
     return None
 
 def search_movies_tmdb(query: str, lang: str = 'te'):
-    """Hybrid search: fast local fuzzy matching first, TMDB fallback for broader coverage."""
-    if not TMDB_READ_TOKEN:
-        return _search_cached_movies(query, lang)
-
     normalized_query = query.strip()
     if len(normalized_query) < 2:
         return []
 
     local_results = _search_cached_movies(normalized_query, lang)
+    if not TMDB_READ_TOKEN or len(local_results) >= _MIN_LOCAL_SEARCH_RESULTS:
+        return local_results
+
     headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
     unique_results: List[Dict[str, Any]] = list(local_results)
     seen = {movie["id"] for movie in local_results if movie.get("id")}

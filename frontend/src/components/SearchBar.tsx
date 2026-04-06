@@ -65,6 +65,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
+  const trimmedQuery = query.trim();
 
   // Initialize Fuse.js for high-speed local string matching
   const searchIndex = useMemo(
@@ -105,11 +106,12 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
    * - 2+ chars, or cache still empty: debounced backend search (TMDB directly).
    */
   useEffect(() => {
-    const trimmedQuery = query.trim();
     const fuzzyQuery = loosenMovieTitle(trimmedQuery);
     const localResults = trimmedQuery
       ? fuse.search(fuzzyQuery).map((result) => result.item as Partial<Movie>).slice(0, 8)
       : initialMovies.slice(0, 6);
+    const shouldQueryBackend =
+      trimmedQuery.length >= 3 && (initialMovies.length === 0 || localResults.length < 3);
     const currentRequestId = ++requestIdRef.current;
     const controller = new AbortController();
 
@@ -130,6 +132,19 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
       };
     }
 
+    if (!shouldQueryBackend) {
+      setLoading(false);
+      trackEvent({
+        event: 'search_completed',
+        lang,
+        query_length: trimmedQuery.length,
+        metadata: { result_count: localResults.length, source: 'local_cache' },
+      });
+      return () => {
+        controller.abort();
+      };
+    }
+
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
@@ -141,7 +156,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
           event: 'search_completed',
           lang,
           query_length: trimmedQuery.length,
-          metadata: { result_count: remoteResults.length },
+          metadata: { result_count: remoteResults.length, source: 'backend_fallback' },
         });
         setResults(mergeResults(localResults, remoteResults));
       } catch (error) {
@@ -154,13 +169,13 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
           setLoading(false);
         }
       }
-    }, 250);
+    }, 180);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, fuse, initialMovies, lang]);
+  }, [trimmedQuery, fuse, initialMovies, lang]);
 
   const handleSelect = (movie: Partial<Movie>) => {
     if (movie.id && movie.title) {
@@ -230,36 +245,38 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
               className="absolute w-full mt-2 bg-cinema-light/98 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto z-50"
             >
               {loading && results.length === 0 && (
-                  <li className="px-4 py-8 text-gray-500 text-sm text-center italic animate-pulse">Scanning the multiverse...</li>
+                  <li className="px-4 py-8 text-gray-500 text-sm text-center italic animate-pulse">
+                    {initialMovies.length > 0 ? 'Searching the local movie index...' : 'Preparing the movie index...'}
+                  </li>
+              )}
+
+              {!loading && trimmedQuery.length >= 2 && results.length === 0 && (
+                <li className="px-4 py-6 text-gray-500 text-sm text-center">
+                  No matches yet. Try a shorter title or alternate spelling.
+                </li>
               )}
               
               {results.map((movie, index) => (
                 <li key={`${movie.id}-${index}`}>
                   <button
                     className={cn(
-                      "w-full text-left px-4 py-3 text-white transition-colors flex items-center justify-between group outline-none",
+                      "w-full text-left px-4 py-3 text-white transition-colors group outline-none",
                       index === activeIndex ? "bg-gold/20 text-gold" : "hover:bg-white/5"
                     )}
                     onClick={() => handleSelect(movie)}
                     onMouseEnter={() => setActiveIndex(index)}
                   >
-                    <div className="flex flex-col min-w-0 pr-2">
+                    <div className="flex flex-col min-w-0">
                       <span className={cn(
                         "font-medium transition-colors truncate",
                         index === activeIndex ? "text-gold" : "text-white"
                       )}>
                         {movie.title}
                       </span>
-                      {movie.year && (
-                        <span className="text-[10px] text-gray-500 mt-0.5 font-bold uppercase tracking-tighter">{INDUSTRY_LABEL[lang ?? 'te']}</span>
-                      )}
+                      <span className="text-[10px] text-gray-500 mt-0.5 font-bold uppercase tracking-tighter">
+                        {INDUSTRY_LABEL[lang ?? 'te']}
+                      </span>
                     </div>
-                    <span className={cn(
-                      "text-xs shrink-0 border border-white/10 px-2 py-0.5 rounded tabular-nums font-mono bg-black/30",
-                      index === activeIndex ? "border-gold/30 text-gold shadow-[0_0_10px_rgba(255,215,0,0.2)]" : "text-gray-500"
-                    )}>
-                      {movie.year || '????'}
-                    </span>
                   </button>
                 </li>
               ))}

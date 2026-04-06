@@ -18,6 +18,8 @@ interface FlipCardProps {
   imageUrl?: string;
   /** Optional sub-indicator like ↑ / ↓ for year hints */
   indicator?: string;
+  /** Slightly denser layout once multiple rows are on screen */
+  compact?: boolean;
 }
 
 /**
@@ -26,11 +28,11 @@ interface FlipCardProps {
  * - Displays different colors based on the validation status.
  * - Shows a portrait of the person (if available) as a subtle background.
  */
-export default function FlipCard({ content, label, status = 'empty', delay = 0, imageUrl, indicator }: FlipCardProps) {
+export default function FlipCard({ content, label, status = 'empty', delay = 0, imageUrl, indicator, compact = false }: FlipCardProps) {
   const isRevealed = status !== 'empty';
 
   return (
-    <div className="relative w-full aspect-[3/4] group perspective-1000">
+    <div className={cn("relative w-full group perspective-1000", compact ? "aspect-square sm:aspect-[1.05]" : "aspect-[0.9] sm:aspect-square")}>
       <motion.div
         className="w-full h-full relative preserve-3d"
         initial={false}
@@ -43,9 +45,9 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
             Shown before the guess is submitted. 
         */}
         {!isRevealed && (
-          <div className="absolute inset-0 backface-hidden bg-cinema-light border-2 border-white/10 rounded-lg flex flex-col items-center justify-center p-2">
-            {label && <span className="text-xs text-white/50 uppercase mb-2">{label}</span>}
-            <div className="w-8 h-8 rounded-full border border-white/20 animate-pulse" />
+          <div className={cn("absolute inset-0 backface-hidden bg-cinema-light border-2 border-white/10 rounded-lg flex flex-col items-center justify-center", compact ? "p-1.5" : "p-2")}>
+            {label && <span className={cn("text-white/50 uppercase", compact ? "mb-1 text-[9px]" : "mb-2 text-[10px] sm:text-xs")}>{label}</span>}
+            <div className={cn("rounded-full border border-white/20 animate-pulse", compact ? "h-6 w-6" : "h-7 w-7 sm:h-8 sm:w-8")} />
           </div>
         )}
 
@@ -74,12 +76,12 @@ export default function FlipCard({ content, label, status = 'empty', delay = 0, 
            ) : null}
            
            <div className="relative z-10 flex flex-col items-center">
-                {label && <span className="text-[10px] text-white/70 uppercase mb-1 font-bold tracking-tighter">{label}</span>}
-                <span className="text-xs sm:text-sm font-bold text-white leading-tight line-clamp-2 drop-shadow-md">
+                {label && <span className={cn("text-white/70 uppercase font-bold tracking-tighter", compact ? "mb-0.5 text-[8px]" : "mb-1 text-[9px] sm:text-[10px]")}>{label}</span>}
+                <span className={cn("font-bold text-white leading-tight line-clamp-2 drop-shadow-md", compact ? "text-[10px] sm:text-xs" : "text-[11px] sm:text-sm")}>
                     {content}
                 </span>
                 {indicator ? (
-                  <span className="mt-1 text-lg font-black text-white drop-shadow-md">{indicator}</span>
+                  <span className={cn("font-black text-white drop-shadow-md", compact ? "mt-0.5 text-base sm:text-lg" : "mt-1 text-lg")}>{indicator}</span>
                 ) : null}
            </div>
         </div>

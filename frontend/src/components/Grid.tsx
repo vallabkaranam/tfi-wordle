@@ -18,12 +18,13 @@ interface GridProps {
  */
 export default function Grid({ guesses }: GridProps) {
   const reversedGuesses = useMemo(() => [...guesses].reverse(), [guesses]);
+  const compactRows = guesses.length >= 4;
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-3 sm:space-y-4 pb-20">
+    <div className="w-full max-w-6xl mx-auto space-y-2.5 sm:space-y-3 pb-16">
       
       {/* Column Labels (Hero, heroine, etc.) */}
-      <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs uppercase text-gray-400 mb-2 px-2 sm:px-4 font-bold tracking-widest opacity-80">
+      <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center text-[9px] sm:text-[11px] uppercase text-gray-400 mb-1.5 px-1 sm:px-2 font-bold tracking-[0.2em] opacity-80">
         <div>Hero</div>
         <div>Heroine</div>
         <div>Director</div>
@@ -37,10 +38,17 @@ export default function Grid({ guesses }: GridProps) {
           reversedGuesses ensures the user sees their latest guess immediately at the top.
       */}
       {reversedGuesses.map((guess, i) => (
-        <div key={`${guess.id}-${i}`} className="bg-cinema-light/40 p-2 sm:p-4 rounded-xl border border-white/5 shadow-sm hover:border-white/10 transition-colors">
+        <div
+          key={`${guess.id}-${i}`}
+          className="bg-cinema-light/40 p-2 sm:p-2.5 rounded-xl border border-white/5 shadow-sm hover:border-white/10 transition-colors"
+        >
           
           {/* Guess Title: Large gold text identifying the movie picked */}
-          <div className="text-white font-bold text-sm sm:text-lg mb-2 text-center text-gold flex items-center justify-center gap-2 truncate px-1">
+          <div
+            className={`text-white font-bold mb-1.5 text-center text-gold flex items-center justify-center gap-2 truncate px-1 ${
+              compactRows ? 'text-xs sm:text-sm' : 'text-sm sm:text-base'
+            }`}
+          >
             {guess.title}
           </div>
           
@@ -52,6 +60,7 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.hero ? 'correct' : 'absent'} 
               delay={0}
               imageUrl={guess.images?.hero}
+              compact={compactRows}
             />
             <FlipCard 
               content={guess.values.heroine} 
@@ -59,6 +68,7 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.heroine ? 'correct' : 'absent'} 
               delay={0.1}
               imageUrl={guess.images?.heroine}
+              compact={compactRows}
             />
             <FlipCard 
               content={guess.values.director} 
@@ -66,6 +76,7 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.director ? 'correct' : 'absent'} 
               delay={0.2}
               imageUrl={guess.images?.director}
+              compact={compactRows}
             />
             <FlipCard 
               content={guess.values.music} 
@@ -73,6 +84,7 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.music ? 'correct' : 'absent'} 
               delay={0.3}
               imageUrl={guess.images?.music}
+              compact={compactRows}
             />
             <FlipCard 
               content={guess.values.producer} 
@@ -80,6 +92,7 @@ export default function Grid({ guesses }: GridProps) {
               status={guess.matches.producer ? 'correct' : 'absent'} 
               delay={0.4}
               imageUrl={guess.images?.producer}
+              compact={compactRows}
             />
             <FlipCard
               content={guess.values.year ? String(guess.values.year) : '????'}
@@ -99,6 +112,7 @@ export default function Grid({ guesses }: GridProps) {
                     : undefined
               }
               delay={0.5}
+              compact={compactRows}
             />
           </div>
         </div>

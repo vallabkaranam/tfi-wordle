@@ -6,14 +6,14 @@ import { fetchMovies, submitGuess } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
 import { loadStats, recordDailyGame, GameStats } from '../lib/stats';
 import { buildShareText, clearStoredGame, loadStoredGame, saveStoredGame } from '../lib/gameState';
-import { canUseNativeShare, copyText } from '../lib/share';
+import { copyText } from '../lib/share';
 import { trackError, trackEvent } from '../lib/telemetry';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
 import StatsModal from '../components/StatsModal';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
-import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Share2, Check, Sparkles, Flame, Clapperboard, Copy } from 'lucide-react';
+import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Check, Sparkles, Flame, Clapperboard, Copy } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Countdown hook — ticks every second to midnight
@@ -276,46 +276,6 @@ export default function Home() {
     }
   }, [gameStatus, guesses, theme.label, isRandom, language, seed]);
 
-  const handleNativeShare = useCallback(async () => {
-    const shareText = buildShareText(
-      gameStatus,
-      guesses,
-      theme.label,
-      isRandom,
-      typeof window !== 'undefined' ? window.location.origin : undefined
-    );
-
-    if (!canUseNativeShare()) {
-      await handleCopyShare();
-      return;
-    }
-
-    try {
-      await navigator.share({
-        title: `${theme.label} Wordle`,
-        text: shareText,
-        url: typeof window !== 'undefined' ? window.location.origin : undefined,
-      });
-      trackEvent({
-        event: 'result_shared',
-        lang: language,
-        seed,
-        status: gameStatus,
-        attempts: guesses.length,
-        metadata: { is_random: isRandom },
-      });
-      setShareError(null);
-      setCopiedShare(true);
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
-      }
-      console.error('Share failed:', error);
-      trackError('share_failed', error, { lang: language, seed, status: gameStatus });
-      setShareError('Share failed. Try copying instead.');
-    }
-  }, [gameStatus, guesses, theme.label, isRandom, language, seed, handleCopyShare]);
-
   async function triggerConfetti() {
     const confetti = (await import('canvas-confetti')).default;
     const end = Date.now() + 3000;
@@ -336,7 +296,6 @@ export default function Home() {
   // Render
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
-  const nativeShareAvailable = canUseNativeShare();
   const shareText = canShare
     ? buildShareText(
         gameStatus,
@@ -454,7 +413,7 @@ export default function Home() {
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-cinema/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
               <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full border border-gold/30 shadow-lg animate-pulse">
                 <Loader2 className="h-4 w-4 text-gold animate-spin" />
-                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking...</span>
+                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking cached clues...</span>
               </div>
             </div>
           )}
@@ -569,15 +528,6 @@ export default function Home() {
                     {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Copy className="h-4 w-4" />}
                     {copiedShare ? 'Copied' : 'Copy Result'}
                   </button>
-                  {nativeShareAvailable && (
-                    <button
-                      onClick={handleNativeShare}
-                      className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
-                    >
-                      <Share2 className="h-4 w-4" />
-                      Share
-                    </button>
-                  )}
                 </div>
                 {shareError && (
                   <p className="mt-2 text-center text-xs text-rose-300">{shareError}</p>

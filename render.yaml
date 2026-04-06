@@ -13,8 +13,14 @@ services:
         value: 3.9.0
       - key: CORS_ORIGINS
         sync: false  # User must provide
-      - key: TMDB_API_KEY
-        sync: false  # Optional (mock fallback)
+      - key: TMDB_READ_TOKEN
+        sync: false  # Required for live TMDB refresh/search
+      - key: CACHE_REFRESH_TIMEZONE
+        value: America/New_York
+      - key: CACHE_REFRESH_HOUR_ET
+        value: 6
+      - key: CACHE_REFRESH_MINUTE_ET
+        value: 0
 
   # Frontend Service
   - type: web
