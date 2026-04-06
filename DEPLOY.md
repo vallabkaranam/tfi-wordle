@@ -5,7 +5,7 @@ This application is designed to be deployed as two separate services:
 1.  **Backend**: Python Web Service (FastAPI)
 2.  **Frontend**: Static/Node Web Service (Next.js)
 
-We recommend **Render** for free tier hosting.
+We recommend **Render** with a persistent disk on the backend for production stability.
 
 ---
 
@@ -21,6 +21,7 @@ The repository includes a `render.yaml` file for automated Infrastructure-as-Cod
     *   `TMDB_API_KEY`: Legacy fallback supported for backwards compatibility.
     *   `CORS_ORIGINS`: Your frontend URL (e.g., `https://tfi-wordle-frontend.onrender.com`).
     *   `NEXT_PUBLIC_API_URL`: Your backend URL + `/api` (e.g., `https://tfi-wordle-backend.onrender.com/api`).
+    *   `MOVIE_CACHE_DIR`: Set automatically by the Blueprint to the mounted disk path.
 3.  **Deploy**: Render will build and deploy both services automatically.
 
 ---
@@ -33,10 +34,15 @@ If you prefer to configure services manually:
 *   **Root Directory**: `.` (Project Root)
 *   **Build Command**: `pip install -r backend/requirements.txt`
 *   **Start Command**: `uvicorn backend.src.main:app --host 0.0.0.0 --port $PORT`
+*   **Plan**: `starter` or higher
+*   **Persistent Disk**:
+    *   Mount Path: `/var/data/tfi-wordle`
+    *   Size: `5 GB`
 *   **Env Vars**:
     *   `CORS_ORIGINS`: Comma-separated list (e.g. `https://your-frontend.onrender.com,http://localhost:3000`)
     *   `TMDB_READ_TOKEN`: Preferred.
     *   `TMDB_API_KEY`: Legacy fallback supported.
+    *   `MOVIE_CACHE_DIR`: `/var/data/tfi-wordle`
 
 ### 2. Frontend Service (Node)
 *   **Root Directory**: `frontend`
@@ -47,23 +53,24 @@ If you prefer to configure services manually:
 
 ---
 
-## ❄️ Cold Start & Data Warm-up
-*   The backend spins up instantly.
-*   Upon startup, it triggers a **background task** to fetch 500+ movies from TMDB.
-*   **Behavior**: For the first ~30 seconds after a cold start, the API will serve mock data while fetching real data in the background. This prevents timeout errors during boot.
-*   Once fetched, data is cached in memory for the life of the instance.
+## ❄️ Durable Cache Behavior
+*   The backend stores the refreshed movie snapshot on the mounted Render Disk.
+*   On startup, it loads the latest successful snapshot from disk immediately.
+*   The daily refresh job updates that snapshot so gameplay stays stable across restarts and deploys.
+*   If the disk snapshot is missing, the backend falls back to rebuilding the pool from TMDB.
 
 ---
 
 ## ✅ verification
 
 1.  **Check Backend Health**:
-    *   Visit `https://your-backend-app.onrender.com/` -> Should return `{"message": "Tollywood Wordle API"}`
+    *   Visit `https://your-backend-app.onrender.com/api/health`
+    *   Confirm `ok: true` and non-zero movie counts for all languages.
 2.  **Check Game Connectivity**:
     *   Open your frontend URL.
     *   Open Developer Tools (F12) -> Network Tab.
     *   Verify request to `/api/movies` returns 200 OK.
-    *   If you see mock data (Baahubali 2, RRR only), wait 30 seconds and refresh. Real data should appear.
+    *   Verify `/api/search` and `/api/guess` return 200 OK.
 
 ## ⚠️ Troubleshooting
 

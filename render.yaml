@@ -4,11 +4,15 @@ services:
     name: tfi-wordle-backend
     runtime: python
     repo: https://github.com/vallabkaranam/tfi-wordle
-    plan: free
+    plan: starter
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.src.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
+    disk:
+      name: movie-cache
+      mountPath: /var/data/tfi-wordle
+      sizeGB: 5
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -22,6 +26,8 @@ services:
         value: 6
       - key: CACHE_REFRESH_MINUTE_ET
         value: 0
+      - key: MOVIE_CACHE_DIR
+        value: /var/data/tfi-wordle
       - key: REFRESH_JOB_TOKEN
         generateValue: true
 
@@ -59,7 +65,7 @@ services:
           type: web
           envVarKey: REFRESH_JOB_TOKEN
 
-  # Stopgap keepalive ping to reduce cold starts on free web service
+  # Stopgap keepalive ping to reduce cold starts
   - type: cron
     name: tfi-wordle-keepalive
     runtime: python

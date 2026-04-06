@@ -35,11 +35,12 @@ logger = logging.getLogger(__name__)
 TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MOVIE_CACHE_DIR = os.getenv("MOVIE_CACHE_DIR") or os.path.join(BASE_DIR, "data")
 
 # Metadata file containing manually curated movie data mappings for Telugu Cinema.
 # This file is used to ensure high accuracy for "Blockbuster" titles.
 METADATA_FILE = os.path.join(BASE_DIR, "data", "tollywood_metadata.json")
-CACHE_SNAPSHOT_FILE = os.path.join(BASE_DIR, "data", "movie_cache_snapshot.json")
+CACHE_SNAPSHOT_FILE = os.getenv("MOVIE_CACHE_SNAPSHOT_FILE") or os.path.join(MOVIE_CACHE_DIR, "movie_cache_snapshot.json")
 
 # In-memory per-language caches to ensure fast game-play once initialized.
 _MOVIES_CACHE: Dict[str, List[Dict[str, Any]]] = {'te': [], 'hi': [], 'ta': []}
@@ -262,6 +263,7 @@ def _save_snapshot_to_disk():
     }
 
     try:
+        os.makedirs(os.path.dirname(CACHE_SNAPSHOT_FILE), exist_ok=True)
         with open(CACHE_SNAPSHOT_FILE, "w", encoding="utf-8") as snapshot_file:
             json.dump(payload, snapshot_file, ensure_ascii=False)
     except OSError as exc:
