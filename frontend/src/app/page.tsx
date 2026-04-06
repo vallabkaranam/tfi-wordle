@@ -296,6 +296,7 @@ export default function Home() {
   // Render
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
+  const showEndgameOverlay = isRandom && gameStatus !== 'in_progress';
   const hero = HERO_COPY[language];
 
   return (
@@ -414,6 +415,78 @@ export default function Home() {
           <Grid guesses={guesses} />
         </div>
 
+        {!isRandom && gameStatus !== 'in_progress' && (
+          <section className="mt-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 shadow-xl sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500 font-semibold">Daily Complete</p>
+                <h3 className={`mt-1 text-xl font-black ${gameStatus === 'won' ? theme.accent : 'text-white'}`}>
+                  {gameStatus === 'won' ? 'You got it.' : 'You are done for today.'}
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  {gameStatus === 'won'
+                    ? `Come back in ${countdown} for the next daily puzzle.`
+                    : `Your board stays here for review. Next daily puzzle unlocks in ${countdown}.`}
+                </p>
+              </div>
+              <div className="flex gap-2 sm:shrink-0">
+                <button
+                  onClick={switchToRandom}
+                  className="px-4 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-sm"
+                >
+                  Try Random
+                </button>
+                {canShare && (
+                  <button
+                    onClick={handleCopyShare}
+                    className="px-4 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                  >
+                    {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Copy className="h-4 w-4" />}
+                    {copiedShare ? 'Copied' : 'Copy Result'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {target && (
+              <div className="mt-4 flex gap-3 rounded-xl border border-white/5 bg-black/30 p-3.5">
+                {target.poster_path ? (
+                  <Image
+                    src={`https://image.tmdb.org/t/p/w185${target.poster_path}`}
+                    alt={target.title}
+                    width={56}
+                    height={80}
+                    sizes="56px"
+                    className="h-20 w-14 rounded-lg object-cover shrink-0 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-14 h-20 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-[10px] text-gray-600">No poster</div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h4 className={`font-bold text-base truncate ${theme.accent}`}>{target.title}</h4>
+                  <p className="text-gray-500 text-xs mb-1.5">{target.year}</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    {([['Hero', target.hero], ['Heroine', target.heroine], ['Director', target.director], ['Music', target.music]] as const).map(([role, name]) => (
+                      <div key={role}>
+                        <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">{role}</span>
+                        <p className="text-white/80 font-medium leading-tight truncate">{name}</p>
+                      </div>
+                    ))}
+                    <div className="col-span-2">
+                      <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">Producer</span>
+                      <p className="text-white/80 font-medium leading-tight truncate">{target.producer}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {shareError && (
+              <p className="mt-3 text-xs text-rose-300">{shareError}</p>
+            )}
+          </section>
+        )}
+
       </div>
 
       {/* ── Modals ── */}
@@ -421,7 +494,7 @@ export default function Home() {
       <StatsModal isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} />
 
       {/* ── End-game overlay ── */}
-      {gameStatus !== 'in_progress' && (
+      {showEndgameOverlay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-cinema-light border border-white/10 rounded-2xl p-5 max-w-md w-full shadow-2xl overflow-y-auto max-h-[88vh]">
 
