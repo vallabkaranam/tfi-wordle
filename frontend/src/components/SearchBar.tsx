@@ -246,7 +246,7 @@ export default function SearchBar({ movies: initialMovies, onGuess, disabled, la
             >
               {loading && results.length === 0 && (
                   <li className="px-4 py-8 text-gray-500 text-sm text-center italic animate-pulse">
-                    {initialMovies.length > 0 ? 'Searching the local movie index...' : 'Preparing the movie index...'}
+                    {initialMovies.length > 0 ? 'Searching titles...' : 'Loading movies...'}
                   </li>
               )}
 

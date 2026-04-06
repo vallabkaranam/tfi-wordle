@@ -297,6 +297,7 @@ export default function Home() {
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
   const showEndgameOverlay = isRandom && gameStatus !== 'in_progress';
+  const showDailyHeaderActions = !isRandom && gameStatus !== 'in_progress';
   const hero = HERO_COPY[language];
 
   return (
@@ -347,10 +348,33 @@ export default function Home() {
 
         {/* Right icons + countdown */}
         <div className="flex items-center gap-1 shrink-0">
-          {!isRandom && (
+          {!showDailyHeaderActions && !isRandom && (
             <div className="hidden sm:flex flex-col items-end mr-1">
               <span className="text-[9px] text-gray-600 uppercase tracking-widest leading-none">Next puzzle</span>
               <span className="text-xs font-mono text-gray-500 tabular-nums">{countdown}</span>
+            </div>
+          )}
+          {showDailyHeaderActions && (
+            <div className="hidden sm:flex items-center gap-2 mr-1">
+              <div className="rounded-xl border border-wordle-green/30 bg-wordle-green/10 px-3 py-2 text-right">
+                <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-wordle-green">Done Today</div>
+                <div className="text-[11px] font-medium text-gray-300 tabular-nums">Next in {countdown}</div>
+              </div>
+              <button
+                onClick={switchToRandom}
+                className="px-3 py-2 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-xs"
+              >
+                Try Random
+              </button>
+              {canShare && (
+                <button
+                  onClick={handleCopyShare}
+                  className="px-3 py-2 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-xs flex items-center justify-center gap-2"
+                >
+                  {copiedShare ? <Check className="h-3.5 w-3.5 text-wordle-green" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedShare ? 'Copied' : 'Copy Result'}
+                </button>
+              )}
             </div>
           )}
           <button onClick={() => setShowHelp(true)} title="How to Play" aria-label="How to Play"
@@ -405,7 +429,7 @@ export default function Home() {
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-cinema/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
               <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full border border-gold/30 shadow-lg animate-pulse">
                 <Loader2 className="h-4 w-4 text-gold animate-spin" />
-                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking cached clues...</span>
+                <span className="text-xs font-bold text-gold uppercase tracking-widest">Checking...</span>
               </div>
             </div>
           )}
@@ -417,7 +441,7 @@ export default function Home() {
 
         {!isRandom && gameStatus !== 'in_progress' && (
           <section className="mt-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 shadow-xl sm:p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500 font-semibold">Daily Complete</p>
                 <h3 className={`mt-1 text-xl font-black ${gameStatus === 'won' ? theme.accent : 'text-white'}`}>
@@ -429,7 +453,7 @@ export default function Home() {
                     : `Your board stays here for review. Next daily puzzle unlocks in ${countdown}.`}
                 </p>
               </div>
-              <div className="flex gap-2 sm:shrink-0">
+              <div className="flex gap-2 sm:hidden">
                 <button
                   onClick={switchToRandom}
                   className="px-4 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-sm"
