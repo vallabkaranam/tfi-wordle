@@ -17,7 +17,8 @@ The repository includes a `render.yaml` file for automated Infrastructure-as-Cod
     *   Connect your GitHub repository.
     *   Render will detect `render.yaml` and prompt you to create two services.
 2.  **Configure Environment Variables**:
-    *   `TMDB_API_KEY`: (Optional) Your TMDB API Key. If omitted, mock data is used.
+    *   `TMDB_READ_TOKEN`: Preferred. Your TMDB v4 read token.
+    *   `TMDB_API_KEY`: Legacy fallback supported for backwards compatibility.
     *   `CORS_ORIGINS`: Your frontend URL (e.g., `https://tfi-wordle-frontend.onrender.com`).
     *   `NEXT_PUBLIC_API_URL`: Your backend URL + `/api` (e.g., `https://tfi-wordle-backend.onrender.com/api`).
 3.  **Deploy**: Render will build and deploy both services automatically.
@@ -34,7 +35,8 @@ If you prefer to configure services manually:
 *   **Start Command**: `uvicorn backend.src.main:app --host 0.0.0.0 --port $PORT`
 *   **Env Vars**:
     *   `CORS_ORIGINS`: Comma-separated list (e.g. `https://your-frontend.onrender.com,http://localhost:3000`)
-    *   `TMDB_API_KEY`: (Optional)
+    *   `TMDB_READ_TOKEN`: Preferred.
+    *   `TMDB_API_KEY`: Legacy fallback supported.
 
 ### 2. Frontend Service (Node)
 *   **Root Directory**: `frontend`
@@ -67,4 +69,4 @@ If you prefer to configure services manually:
 
 *   **CORS Error**: Ensure your frontend URL (exactly as it appears in the browser) is added to `CORS_ORIGINS` in the backend settings.
 *   **Backend Timeout**: The app is designed *not* to timeout. If it does, ensure `uvicorn` is binding to `0.0.0.0`.
-*   **Missing Data**: Check backend logs. If `TMDB_API_KEY` is invalid or missing, it will permanently serve mock data.
+*   **Missing Data**: Check backend logs. If `TMDB_READ_TOKEN` and `TMDB_API_KEY` are both missing or invalid, cached movie data will stay empty.

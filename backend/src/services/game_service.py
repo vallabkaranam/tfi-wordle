@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION & GLOBAL STATE
 # -------------------------------------------------------------------
 
-TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN")
+TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN") or os.getenv("TMDB_API_KEY")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Metadata file containing manually curated movie data mappings for Telugu Cinema.
