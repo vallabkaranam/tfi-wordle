@@ -297,7 +297,6 @@ export default function Home() {
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
   const showEndgameOverlay = isRandom && gameStatus !== 'in_progress';
-  const showDailyHeaderActions = !isRandom && gameStatus !== 'in_progress';
   const hero = HERO_COPY[language];
 
   return (
@@ -348,33 +347,10 @@ export default function Home() {
 
         {/* Right icons + countdown */}
         <div className="flex items-center gap-1 shrink-0">
-          {!showDailyHeaderActions && !isRandom && (
+          {!isRandom && (
             <div className="hidden sm:flex flex-col items-end mr-1">
               <span className="text-[9px] text-gray-600 uppercase tracking-widest leading-none">Next puzzle</span>
               <span className="text-xs font-mono text-gray-500 tabular-nums">{countdown}</span>
-            </div>
-          )}
-          {showDailyHeaderActions && (
-            <div className="hidden sm:flex items-center gap-2 mr-1">
-              <div className="rounded-xl border border-wordle-green/30 bg-wordle-green/10 px-3 py-2 text-right">
-                <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-wordle-green">Done Today</div>
-                <div className="text-[11px] font-medium text-gray-300 tabular-nums">Next in {countdown}</div>
-              </div>
-              <button
-                onClick={switchToRandom}
-                className="px-3 py-2 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-xs"
-              >
-                Try Random
-              </button>
-              {canShare && (
-                <button
-                  onClick={handleCopyShare}
-                  className="px-3 py-2 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-xs flex items-center justify-center gap-2"
-                >
-                  {copiedShare ? <Check className="h-3.5 w-3.5 text-wordle-green" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copiedShare ? 'Copied' : 'Copy Result'}
-                </button>
-              )}
             </div>
           )}
           <button onClick={() => setShowHelp(true)} title="How to Play" aria-label="How to Play"
@@ -433,10 +409,6 @@ export default function Home() {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="mt-5">
-          <Grid guesses={guesses} />
         </div>
 
         {!isRandom && gameStatus !== 'in_progress' && (
@@ -510,6 +482,10 @@ export default function Home() {
             )}
           </section>
         )}
+
+        <div className="mt-5">
+          <Grid guesses={guesses} />
+        </div>
 
       </div>
 
