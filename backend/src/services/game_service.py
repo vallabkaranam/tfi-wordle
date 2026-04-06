@@ -70,6 +70,7 @@ _SCHEDULER_STARTED = False
 _SNAPSHOT_LOADED = False
 _LAST_REFRESHED_AT: Dict[str, Optional[str]] = {lang: None for lang in SUPPORTED_LANGS}
 _PRIMARY_STARTUP_LANG = os.getenv("PRIMARY_STARTUP_LANG", "te")
+_SECONDARY_WARMUP_DELAY_SECONDS = int(os.getenv("SECONDARY_WARMUP_DELAY_SECONDS", "8"))
 
 
 def _normalize_search_text(value: str) -> str:
@@ -522,7 +523,19 @@ def _perform_data_refresh(lang: str = 'te'):
 def initialize_movie_data(background: bool = False):
     _load_snapshot_from_disk()
     _start_refresh_scheduler()
-    _ensure_movie_data(_PRIMARY_STARTUP_LANG if _PRIMARY_STARTUP_LANG in SUPPORTED_LANGS else 'te', background=background)
+    primary_lang = _PRIMARY_STARTUP_LANG if _PRIMARY_STARTUP_LANG in SUPPORTED_LANGS else 'te'
+    _ensure_movie_data(primary_lang, background=background)
+
+    secondary_langs = [lang for lang in SUPPORTED_LANGS if lang != primary_lang]
+
+    def warm_secondary_languages():
+        if _SECONDARY_WARMUP_DELAY_SECONDS > 0:
+            threading.Event().wait(_SECONDARY_WARMUP_DELAY_SECONDS)
+        for lang in secondary_langs:
+            _ensure_movie_data(lang, background=True)
+
+    if secondary_langs:
+        threading.Thread(target=warm_secondary_languages, daemon=True).start()
 
 
 def _start_refresh_thread(lang: str):
