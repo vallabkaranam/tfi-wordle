@@ -296,15 +296,6 @@ export default function Home() {
   // Render
   // ---------------------------------------------------------------------------
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
-  const shareText = canShare
-    ? buildShareText(
-        gameStatus,
-        guesses,
-        theme.label,
-        isRandom,
-        typeof window !== 'undefined' ? window.location.origin : undefined
-      )
-    : '';
   const hero = HERO_COPY[language];
 
   return (
@@ -432,7 +423,7 @@ export default function Home() {
       {/* ── End-game overlay ── */}
       {gameStatus !== 'in_progress' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-cinema-light border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="bg-cinema-light border border-white/10 rounded-2xl p-5 max-w-md w-full shadow-2xl overflow-y-auto max-h-[88vh]">
 
             {/* Result headline */}
             {gameStatus === 'won' ? (
@@ -453,7 +444,7 @@ export default function Home() {
 
             {/* Answer card */}
             {target && (
-              <div className="flex gap-4 bg-black/40 border border-white/5 rounded-xl p-4 mb-5">
+              <div className="flex gap-3 bg-black/40 border border-white/5 rounded-xl p-3.5 mb-4">
                 {target.poster_path ? (
                   <Image
                     src={`https://image.tmdb.org/t/p/w185${target.poster_path}`}
@@ -468,8 +459,8 @@ export default function Home() {
                 )}
                 <div className="min-w-0 flex-1">
                   <h3 className={`font-bold text-base truncate ${theme.accent}`}>{target.title}</h3>
-                  <p className="text-gray-500 text-xs mb-2">{target.year}</p>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <p className="text-gray-500 text-xs mb-1.5">{target.year}</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                     {([['Hero', target.hero], ['Heroine', target.heroine], ['Director', target.director], ['Music', target.music]] as const).map(([role, name]) => (
                       <div key={role}>
                         <span className="text-gray-600 uppercase text-[9px] font-semibold tracking-wider">{role}</span>
@@ -495,16 +486,8 @@ export default function Home() {
                 onClick={playAgain}
                 className="flex-1 py-3 bg-gold text-black font-bold rounded-xl hover:bg-yellow-400 active:scale-95 transition-all text-sm"
               >
-                {isRandom ? 'New Random' : 'Play Random'}
+                {isRandom ? 'New Random' : 'Try Random'}
               </button>
-              {!isRandom && (
-                <button
-                  onClick={switchToRandom}
-                  className="px-4 py-3 bg-white/5 border border-white/10 text-gray-300 font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm"
-                >
-                  Random
-                </button>
-              )}
               {isRandom && (
                 <button
                   onClick={switchToDaily}
@@ -516,10 +499,6 @@ export default function Home() {
             </div>
             {canShare && (
               <>
-                <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
-                  <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-gray-500">Share Preview</div>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-200">{shareText}</pre>
-                </div>
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={handleCopyShare}
