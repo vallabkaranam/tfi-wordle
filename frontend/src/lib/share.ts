@@ -29,3 +29,11 @@ export async function copyText(text: string) {
 export function canUseNativeShare() {
   return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 }
+
+export async function shareContent(data: ShareData) {
+  if (!canUseNativeShare()) {
+    throw new Error('Native sharing is unavailable in this environment.');
+  }
+
+  await navigator.share(data);
+}

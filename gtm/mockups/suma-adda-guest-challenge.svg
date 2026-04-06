@@ -1,0 +1,59 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="1480" y2="840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#090909"/>
+      <stop offset="0.55" stop-color="#17120C"/>
+      <stop offset="1" stop-color="#321A08"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFE082"/>
+      <stop offset="1" stop-color="#F6B719"/>
+    </linearGradient>
+    <linearGradient id="card" x1="340" y1="220" x2="1245" y2="765" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B1B1F"/>
+      <stop offset="1" stop-color="#101014"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="36" fill="url(#bg)"/>
+  <rect x="48" y="48" width="1504" height="804" rx="30" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+  <text x="110" y="140" fill="#A0A0A0" font-family="Arial, sans-serif" font-size="28" letter-spacing="8">PROMO SEGMENT MOCKUP</text>
+  <text x="110" y="220" fill="white" font-family="Arial, sans-serif" font-size="78" font-weight="700">Suma Adda Movie Challenge</text>
+  <text x="110" y="280" fill="#F4D06F" font-family="Arial, sans-serif" font-size="34" font-weight="700">Guest vs Host. Crack the movie in 6 tries.</text>
+  <text x="110" y="346" fill="#DADADA" font-family="Arial, sans-serif" font-size="30">Use this as a 60-second on-camera segment, then send viewers into the same challenge.</text>
+
+  <rect x="110" y="395" width="260" height="56" rx="28" fill="#F6B719" fill-opacity="0.16" stroke="#F6B719" stroke-opacity="0.45"/>
+  <text x="148" y="431" fill="#FFE082" font-family="Arial, sans-serif" font-size="26" font-weight="700">PLAY AFTER THE INTERVIEW</text>
+
+  <rect x="770" y="150" width="670" height="620" rx="32" fill="url(#card)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <rect x="812" y="188" width="586" height="72" rx="22" fill="#0B0B0F" stroke="rgba(255,255,255,0.07)" stroke-width="2"/>
+  <text x="852" y="234" fill="url(#gold)" font-family="Arial, sans-serif" font-size="32" font-weight="700">TFI WORDLE</text>
+  <text x="1118" y="234" fill="#9D9D9D" font-family="Arial, sans-serif" font-size="22">Telugu Daily Challenge</text>
+
+  <rect x="812" y="286" width="586" height="280" rx="24" fill="#0E0E12" stroke="rgba(255,255,255,0.05)" stroke-width="2"/>
+  <text x="852" y="336" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">Decode the Telugu movie from the people behind it.</text>
+  <text x="852" y="378" fill="#B8B8B8" font-family="Arial, sans-serif" font-size="23">Hero, heroine, director, music, producer, and year clues.</text>
+
+  <rect x="852" y="424" width="100" height="70" rx="14" fill="#1F7A45"/>
+  <rect x="966" y="424" width="100" height="70" rx="14" fill="#1F7A45"/>
+  <rect x="1080" y="424" width="100" height="70" rx="14" fill="#7A611F"/>
+  <rect x="1194" y="424" width="100" height="70" rx="14" fill="#2A2A30"/>
+  <rect x="1308" y="424" width="50" height="70" rx="14" fill="#1F7A45"/>
+
+  <rect x="852" y="510" width="100" height="70" rx="14" fill="#2A2A30"/>
+  <rect x="966" y="510" width="100" height="70" rx="14" fill="#1F7A45"/>
+  <rect x="1080" y="510" width="100" height="70" rx="14" fill="#1F7A45"/>
+  <rect x="1194" y="510" width="100" height="70" rx="14" fill="#7A611F"/>
+  <rect x="1308" y="510" width="50" height="70" rx="14" fill="#1F7A45"/>
+
+  <text x="848" y="634" fill="#999999" font-family="Arial, sans-serif" font-size="20" letter-spacing="3">RESULT PREVIEW</text>
+  <rect x="848" y="654" width="514" height="72" rx="20" fill="#121217" stroke="rgba(246,183,25,0.20)" stroke-width="2"/>
+  <text x="878" y="700" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="29" font-weight="700">TFI Wordle 2026-04-06 3/6</text>
+  <text x="1238" y="700" fill="#F4D06F" font-family="Arial, sans-serif" font-size="26" font-weight="700">Share Result</text>
+
+  <rect x="110" y="585" width="560" height="185" rx="28" fill="#111116" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <text x="148" y="642" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="34" font-weight="700">Why this works for Suma Adda</text>
+  <text x="148" y="688" fill="#D5D5D5" font-family="Arial, sans-serif" font-size="26">1. Fast enough for a promo segment</text>
+  <text x="148" y="726" fill="#D5D5D5" font-family="Arial, sans-serif" font-size="26">2. Funny enough for guest-vs-host banter</text>
+  <text x="148" y="764" fill="#D5D5D5" font-family="Arial, sans-serif" font-size="26">3. Easy for fans to try right after the clip</text>
+</svg>

@@ -1,4 +1,5 @@
 import { GuessResult, Movie } from './types';
+import { AttributionContext } from './attribution';
 import { getLocalDateKey } from './date';
 
 type GameStatus = 'in_progress' | 'won' | 'lost';
@@ -10,6 +11,9 @@ export interface StoredGameState {
 }
 
 const GAME_STATE_PREFIX = 'tfi-wordle-game';
+const DEFAULT_SITE_URL = 'https://tfi-wordle-frontend.onrender.com';
+
+type ShareMethod = 'copy' | 'native';
 
 export function getGameStorageKey(lang: string, seed?: number) {
   if (seed !== undefined) {
@@ -57,12 +61,49 @@ export function clearStoredGame(lang: string, seed?: number) {
   localStorage.removeItem(getGameStorageKey(lang, seed));
 }
 
+export function buildPlayUrl({
+  origin,
+  lang,
+  seed,
+  isRandom,
+  shareMethod,
+  attribution,
+}: {
+  origin?: string;
+  lang: string;
+  seed?: number;
+  isRandom: boolean;
+  shareMethod: ShareMethod;
+  attribution?: AttributionContext;
+}) {
+  const url = new URL(origin || DEFAULT_SITE_URL);
+  const utmCampaign = attribution?.campaign || (isRandom ? 'random_challenge' : 'daily_puzzle');
+
+  url.searchParams.set('lang', lang);
+  if (isRandom && seed !== undefined) {
+    url.searchParams.set('seed', String(seed));
+  }
+  if (attribution?.partner) {
+    url.searchParams.set('partner', attribution.partner);
+  }
+  if (attribution?.campaign) {
+    url.searchParams.set('campaign', attribution.campaign);
+  }
+  url.searchParams.set('ref', 'share');
+  url.searchParams.set('utm_source', 'tfi_wordle');
+  url.searchParams.set('utm_medium', 'social');
+  url.searchParams.set('utm_campaign', utmCampaign);
+  url.searchParams.set('utm_content', `${lang}_${shareMethod}`);
+
+  return url.toString();
+}
+
 export function buildShareText(
   status: GameStatus,
   guesses: GuessResult[],
   languageLabel: string,
   isRandom: boolean,
-  origin?: string
+  playUrl: string
 ) {
   const outcome = status === 'won' ? guesses.length.toString() : 'X';
   const header = `${languageLabel} Wordle ${isRandom ? 'Random' : getLocalDateKey()} ${outcome}/6`;
@@ -87,5 +128,5 @@ export function buildShareText(
     }).join('');
   });
 
-  return [header, ...rows, `Play: ${origin || 'https://tfi-wordle.vercel.app'}`].join('\n');
+  return [header, ...rows, `Play: ${playUrl}`].join('\n');
 }

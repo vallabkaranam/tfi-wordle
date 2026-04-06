@@ -5,15 +5,16 @@ import Image from 'next/image';
 import { fetchMovies, submitGuess } from '../lib/api';
 import { Movie, GuessResult } from '../lib/types';
 import { loadStats, recordDailyGame, GameStats } from '../lib/stats';
-import { buildShareText, clearStoredGame, loadStoredGame, saveStoredGame } from '../lib/gameState';
-import { copyText } from '../lib/share';
+import { buildPlayUrl, buildShareText, clearStoredGame, loadStoredGame, saveStoredGame } from '../lib/gameState';
+import { canUseNativeShare, copyText, shareContent } from '../lib/share';
+import { AttributionContext, getInitialLanguageFromLocation, getInitialSeedFromLocation, hasAttributionContext, readAttributionFromLocation } from '../lib/attribution';
 import { trackError, trackEvent } from '../lib/telemetry';
 import SearchBar from '../components/SearchBar';
 import Grid from '../components/Grid';
 import StatsModal from '../components/StatsModal';
 import HowToPlay from '../components/HowToPlay';
 import LanguageToggle, { Language } from '../components/LanguageToggle';
-import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Check, Sparkles, Flame, Clapperboard, Copy } from 'lucide-react';
+import { Trophy, HelpCircle, Calendar, Shuffle, Loader2, Check, Sparkles, Flame, Clapperboard, Copy, Share2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Countdown hook — ticks every second to midnight
@@ -95,10 +96,15 @@ export default function Home() {
   const [showStats, setShowStats] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [stats, setStats] = useState<GameStats>(() => loadStats());
-  const [copiedShare, setCopiedShare] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState<'copied' | 'shared' | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [hasLoadedStoredGame, setHasLoadedStoredGame] = useState(false);
+  const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false);
+  const [nativeShareSupported, setNativeShareSupported] = useState(false);
+  const [attribution, setAttribution] = useState<AttributionContext>({});
   const hasTrackedInitialView = useRef(false);
+  const hasHydratedInitialRoute = useRef(false);
+  const hasProcessedFirstLanguageLoad = useRef(false);
 
   const countdown = useCountdown();
 
@@ -122,6 +128,19 @@ export default function Home() {
   // Effects
   // ---------------------------------------------------------------------------
 
+  useEffect(() => {
+    if (hasHydratedInitialRoute.current) {
+      return;
+    }
+
+    hasHydratedInitialRoute.current = true;
+    setLanguage(getInitialLanguageFromLocation() as Language);
+    setSeed(getInitialSeedFromLocation());
+    setAttribution(readAttributionFromLocation());
+    setNativeShareSupported(canUseNativeShare());
+    setHasInitializedFromUrl(true);
+  }, []);
+
   // Re-fetch suggestions & reset board on language change
   useEffect(() => {
     fetchMovies(language)
@@ -133,20 +152,43 @@ export default function Home() {
         console.error(error);
         trackError('movie_pool_failed', error, { lang: language });
       });
-    resetGame(); // Switch language → back to daily for that language
-  }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!hasInitializedFromUrl) {
+      return;
+    }
+
+    if (hasProcessedFirstLanguageLoad.current) {
+      resetGame(); // Switch language → back to daily for that language
+      return;
+    }
+
+    hasProcessedFirstLanguageLoad.current = true;
+  }, [hasInitializedFromUrl, language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (hasTrackedInitialView.current) {
+    if (!hasInitializedFromUrl || hasTrackedInitialView.current) {
       return;
     }
     hasTrackedInitialView.current = true;
-    trackEvent({ event: 'page_view', lang: language, seed });
-  }, [language, seed]);
+    trackEvent({
+      event: 'page_view',
+      lang: language,
+      seed,
+      metadata: hasAttributionContext(attribution) ? attribution : undefined,
+    });
+  }, [attribution, hasInitializedFromUrl, language, seed]);
 
   useEffect(() => {
-    trackEvent({ event: 'language_changed', lang: language, seed });
-  }, [language, seed]);
+    if (!hasInitializedFromUrl) {
+      return;
+    }
+
+    trackEvent({
+      event: 'language_changed',
+      lang: language,
+      seed,
+      metadata: hasAttributionContext(attribution) ? attribution : undefined,
+    });
+  }, [attribution, hasInitializedFromUrl, language, seed]);
 
   useEffect(() => {
     setHasLoadedStoredGame(false);
@@ -173,13 +215,13 @@ export default function Home() {
   }, [language, guesses, gameStatus, target, seed, hasLoadedStoredGame]);
 
   useEffect(() => {
-    if (!copiedShare) {
+    if (!shareSuccess) {
       return;
     }
 
-    const timeout = window.setTimeout(() => setCopiedShare(false), 2000);
+    const timeout = window.setTimeout(() => setShareSuccess(null), 2000);
     return () => window.clearTimeout(timeout);
-  }, [copiedShare]);
+  }, [shareSuccess]);
 
   useEffect(() => {
     if (!shareError) {
@@ -249,32 +291,76 @@ export default function Home() {
   };
 
   const handleCopyShare = useCallback(async () => {
+    const playUrl = buildPlayUrl({
+      origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      lang: language,
+      seed,
+      isRandom,
+      shareMethod: nativeShareSupported ? 'native' : 'copy',
+      attribution,
+    });
     const shareText = buildShareText(
       gameStatus,
       guesses,
       theme.label,
       isRandom,
-      typeof window !== 'undefined' ? window.location.origin : undefined
+      playUrl
     );
 
     try {
-      await copyText(shareText);
-      trackEvent({
-        event: 'result_copied',
+      if (nativeShareSupported) {
+        await shareContent({
+          title: `${theme.label} Wordle`,
+          text: shareText,
+          url: playUrl,
+        });
+        trackEvent({
+          event: 'result_shared',
+          lang: language,
+          seed,
+          status: gameStatus,
+          attempts: guesses.length,
+          metadata: {
+            is_random: isRandom,
+            share_method: 'native',
+            partner: attribution.partner,
+            campaign: attribution.campaign,
+          },
+        });
+        setShareSuccess('shared');
+      } else {
+        await copyText(shareText);
+        trackEvent({
+          event: 'result_copied',
+          lang: language,
+          seed,
+          status: gameStatus,
+          attempts: guesses.length,
+          metadata: {
+            is_random: isRandom,
+            share_method: 'copy',
+            partner: attribution.partner,
+            campaign: attribution.campaign,
+          },
+        });
+        setShareSuccess('copied');
+      }
+
+      setShareError(null);
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+
+      console.error('Copy failed:', error);
+      trackError(nativeShareSupported ? 'share_failed' : 'copy_failed', error, {
         lang: language,
         seed,
         status: gameStatus,
-        attempts: guesses.length,
-        metadata: { is_random: isRandom },
       });
-      setShareError(null);
-      setCopiedShare(true);
-    } catch (error) {
-      console.error('Copy failed:', error);
-      trackError('copy_failed', error, { lang: language, seed, status: gameStatus });
-      setShareError('Copy failed on this browser.');
+      setShareError(nativeShareSupported ? 'Share failed on this browser.' : 'Copy failed on this browser.');
     }
-  }, [gameStatus, guesses, theme.label, isRandom, language, seed]);
+  }, [attribution, gameStatus, guesses, isRandom, language, nativeShareSupported, seed, theme.label]);
 
   async function triggerConfetti() {
     const confetti = (await import('canvas-confetti')).default;
@@ -298,6 +384,14 @@ export default function Home() {
   const canShare = gameStatus !== 'in_progress' && guesses.length > 0;
   const showEndgameOverlay = isRandom && gameStatus !== 'in_progress';
   const hero = HERO_COPY[language];
+  const shareButtonLabel = shareSuccess === 'shared'
+    ? 'Shared'
+    : shareSuccess === 'copied'
+      ? 'Copied'
+      : nativeShareSupported
+        ? 'Share Result'
+        : 'Copy Result';
+  const ShareButtonIcon = shareSuccess ? Check : nativeShareSupported ? Share2 : Copy;
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-cinema text-white font-sans">
@@ -420,8 +514,8 @@ export default function Home() {
                     onClick={handleCopyShare}
                     className="px-4 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
                   >
-                    {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Copy className="h-4 w-4" />}
-                    {copiedShare ? 'Copied' : 'Copy Result'}
+                    <ShareButtonIcon className={`h-4 w-4 ${shareSuccess ? 'text-wordle-green' : ''}`} />
+                    {shareButtonLabel}
                   </button>
                 )}
               </div>
@@ -573,8 +667,8 @@ export default function Home() {
                     onClick={handleCopyShare}
                     className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
                   >
-                    {copiedShare ? <Check className="h-4 w-4 text-wordle-green" /> : <Copy className="h-4 w-4" />}
-                    {copiedShare ? 'Copied' : 'Copy Result'}
+                    <ShareButtonIcon className={`h-4 w-4 ${shareSuccess ? 'text-wordle-green' : ''}`} />
+                    {shareButtonLabel}
                   </button>
                 </div>
                 {shareError && (

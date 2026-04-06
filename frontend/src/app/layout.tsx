@@ -3,11 +3,11 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tfi-wordle.vercel.app'
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tfi-wordle-frontend.onrender.com'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'TFI Wordle | The Movie Guessing Game for Indian Cinema',
+  title: 'TFI Wordle | The Daily Movie Guessing Game for Telugu, Hindi, and Tamil Cinema',
   description: 'Guess the movie in 6 tries using hero, heroine, director, music, producer, and year clues across Tollywood, Bollywood, and Kollywood.',
   keywords: ['movie wordle', 'tollywood game', 'bollywood game', 'kollywood game', 'indian cinema game', 'daily movie puzzle'],
   alternates: {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'TFI Wordle',
-    description: 'A fast, shareable daily movie puzzle for Indian cinema fans.',
+    description: 'A fast, shareable daily movie puzzle for Telugu, Hindi, and Tamil cinema fans.',
     url: siteUrl,
     siteName: 'TFI Wordle',
     type: 'website',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'TFI Wordle',
-    description: 'Guess the movie in 6 tries and share your score.',
+    description: 'Guess the movie in 6 tries and challenge your friends.',
     images: ['/social-preview.svg'],
   },
   icons: {

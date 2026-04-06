@@ -1,0 +1,65 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="70" y1="50" x2="1530" y2="850" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#070707"/>
+      <stop offset="0.58" stop-color="#171717"/>
+      <stop offset="1" stop-color="#2D1206"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFD76A"/>
+      <stop offset="1" stop-color="#FFB703"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="36" fill="url(#bg)"/>
+  <rect x="46" y="46" width="1508" height="808" rx="30" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+  <text x="96" y="126" fill="#9F9F9F" font-family="Arial, sans-serif" font-size="26" letter-spacing="8">STUDIO ACTIVATION MOCKUP</text>
+  <text x="96" y="210" fill="white" font-family="Arial, sans-serif" font-size="84" font-weight="700">Release Week Fan Challenge</text>
+  <text x="96" y="274" fill="#FFD76A" font-family="Arial, sans-serif" font-size="34" font-weight="700">A branded asset fans can play, share, and compare during the promo cycle.</text>
+
+  <rect x="96" y="330" width="360" height="72" rx="24" fill="#FFB703" fill-opacity="0.14" stroke="#FFB703" stroke-opacity="0.45"/>
+  <text x="136" y="375" fill="#FFE4A3" font-family="Arial, sans-serif" font-size="30" font-weight="700">FILM TITLE RELEASE WEEK</text>
+
+  <rect x="96" y="456" width="520" height="258" rx="28" fill="#111116" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <text x="138" y="514" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="36" font-weight="700">Partner value</text>
+  <text x="138" y="562" fill="#D7D7D7" font-family="Arial, sans-serif" font-size="28">1. More interactive than a static promo tile</text>
+  <text x="138" y="604" fill="#D7D7D7" font-family="Arial, sans-serif" font-size="28">2. Easy to post in Stories, Reels, and WhatsApp</text>
+  <text x="138" y="646" fill="#D7D7D7" font-family="Arial, sans-serif" font-size="28">3. Gives the digital team measurable engagement</text>
+
+  <rect x="698" y="130" width="804" height="640" rx="30" fill="#131318" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <rect x="744" y="176" width="336" height="548" rx="34" fill="#09090D" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <text x="798" y="232" fill="#FFCE54" font-family="Arial, sans-serif" font-size="26" font-weight="700">BRANDED GAME SCREEN</text>
+  <text x="798" y="270" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="34" font-weight="700">Guess the movie in 6 tries</text>
+  <text x="798" y="304" fill="#B7B7B7" font-family="Arial, sans-serif" font-size="22">Hero, heroine, director, music, producer, year</text>
+
+  <rect x="798" y="340" width="224" height="44" rx="22" fill="#FFB703" fill-opacity="0.14" stroke="#FFB703" stroke-opacity="0.32"/>
+  <text x="830" y="369" fill="#FFE29A" font-family="Arial, sans-serif" font-size="20" font-weight="700">Powered for Studio Name</text>
+
+  <rect x="796" y="410" width="72" height="72" rx="14" fill="#1F7A45"/>
+  <rect x="882" y="410" width="72" height="72" rx="14" fill="#1F7A45"/>
+  <rect x="968" y="410" width="72" height="72" rx="14" fill="#7A611F"/>
+  <rect x="1054" y="410" width="72" height="72" rx="14" fill="#2A2A30"/>
+  <rect x="1140" y="410" width="72" height="72" rx="14" fill="#1F7A45"/>
+
+  <rect x="796" y="496" width="72" height="72" rx="14" fill="#2A2A30"/>
+  <rect x="882" y="496" width="72" height="72" rx="14" fill="#1F7A45"/>
+  <rect x="968" y="496" width="72" height="72" rx="14" fill="#1F7A45"/>
+  <rect x="1054" y="496" width="72" height="72" rx="14" fill="#1F7A45"/>
+  <rect x="1140" y="496" width="72" height="72" rx="14" fill="#7A611F"/>
+
+  <rect x="1252" y="186" width="210" height="178" rx="24" fill="#0B0B0F" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+  <text x="1282" y="238" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="28" font-weight="700">What the team gets</text>
+  <text x="1282" y="280" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">Clicks</text>
+  <text x="1282" y="312" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">Starts</text>
+  <text x="1282" y="344" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">Completions</text>
+  <text x="1282" y="376" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">Shares</text>
+
+  <rect x="1252" y="398" width="210" height="234" rx="24" fill="#0B0B0F" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+  <text x="1282" y="448" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="28" font-weight="700">Suggested CTA</text>
+  <text x="1282" y="492" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">Can you crack</text>
+  <text x="1282" y="522" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">the movie before</text>
+  <text x="1282" y="552" fill="#D2D2D2" font-family="Arial, sans-serif" font-size="22">your friends do?</text>
+
+  <rect x="744" y="748" width="718" height="72" rx="24" fill="#111116" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+  <text x="782" y="793" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="28">Suggested campaign URL: /?lang=te&amp;partner=studio_name&amp;campaign=release_week</text>
+</svg>
