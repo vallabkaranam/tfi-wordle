@@ -32,7 +32,8 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION & GLOBAL STATE
 # -------------------------------------------------------------------
 
-TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN") or os.getenv("TMDB_API_KEY")
+TMDB_READ_TOKEN = os.getenv("TMDB_READ_TOKEN")
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Metadata file containing manually curated movie data mappings for Telugu Cinema.
@@ -167,21 +168,35 @@ def _refresh_worker_count(batch_size: int) -> int:
     return max(_DISCOVER_MIN_WORKERS, min(_DISCOVER_MAX_WORKERS, batch_size))
 
 
+def _tmdb_auth_headers() -> Dict[str, str]:
+    headers = {"Content-Type": "application/json;charset=utf-8"}
+    if TMDB_READ_TOKEN:
+        headers["Authorization"] = f"Bearer {TMDB_READ_TOKEN}"
+    return headers
+
+
+def _tmdb_auth_params(params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    request_params = dict(params or {})
+    if not TMDB_READ_TOKEN and TMDB_API_KEY:
+        request_params["api_key"] = TMDB_API_KEY
+    return request_params
+
+
 def _tmdb_get(path: str, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None) -> Optional[requests.Response]:
     """Small wrapper so every TMDB call gets a timeout and consistent error handling."""
     try:
         response = requests.get(
             f"https://api.themoviedb.org/3/{path}",
             headers=headers,
-            params=params,
+            params=_tmdb_auth_params(params),
             timeout=_TMDB_TIMEOUT,
         )
         if response.status_code != 200:
-            logger.warning("tmdb request failed path=%s status=%s params=%s", path, response.status_code, params)
+            logger.warning("tmdb request failed path=%s status=%s params=%s", path, response.status_code, _tmdb_auth_params(params))
             return None
         return response
     except requests.RequestException as exc:
-        logger.warning("tmdb request exception path=%s params=%s error=%s", path, params, exc)
+        logger.warning("tmdb request exception path=%s params=%s error=%s", path, _tmdb_auth_params(params), exc)
         return None
 
 
@@ -377,8 +392,8 @@ def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
     Uses gender-based and job-title-based heuristics to identify key roles.
     """
     if tmdb_id in _ENRICHMENT_CACHE: return _ENRICHMENT_CACHE[tmdb_id]
-    if not TMDB_READ_TOKEN: return None
-    headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}", "Content-Type": "application/json;charset=utf-8"}
+    if not (TMDB_READ_TOKEN or TMDB_API_KEY): return None
+    headers = _tmdb_auth_headers()
 
     response = _tmdb_get(f"movie/{tmdb_id}?append_to_response=credits", headers)
     if not response:
@@ -414,11 +429,11 @@ def _enrich_from_tmdb_live(tmdb_id: int) -> Optional[Dict[str, Any]]:
 
 def _perform_data_refresh(lang: str = 'te'):
     """Populates cache for a language using parallel workers."""
-    if not TMDB_READ_TOKEN:
+    if not (TMDB_READ_TOKEN or TMDB_API_KEY):
         with _INIT_LOCK:
             _INIT_STARTED[lang] = False
         return
-    headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}", "Content-Type": "application/json;charset=utf-8"}
+    headers = _tmdb_auth_headers()
 
     is_curated_lang = (lang == 'te')
     metadata_map = _load_local_metadata() if is_curated_lang else {}
@@ -560,7 +575,7 @@ def fetch_movies_for_lang(lang: str = 'te'):
         return list(_MOVIES_CACHE.get(lang, []))
 
 def _pick_live_movie(lang: str):
-    headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
+    headers = _tmdb_auth_headers()
 
     for min_votes in _DISCOVER_VOTE_FLOORS:
         response = _tmdb_get(
@@ -583,10 +598,10 @@ def search_movies_tmdb(query: str, lang: str = 'te'):
         return []
 
     local_results = _search_cached_movies(normalized_query, lang)
-    if not TMDB_READ_TOKEN or len(local_results) >= _MIN_LOCAL_SEARCH_RESULTS:
+    if not (TMDB_READ_TOKEN or TMDB_API_KEY) or len(local_results) >= _MIN_LOCAL_SEARCH_RESULTS:
         return local_results
 
-    headers = {"Authorization": f"Bearer {TMDB_READ_TOKEN}"}
+    headers = _tmdb_auth_headers()
     unique_results: List[Dict[str, Any]] = list(local_results)
     seen = {movie["id"] for movie in local_results if movie.get("id")}
 
